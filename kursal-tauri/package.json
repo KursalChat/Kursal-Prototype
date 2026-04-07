@@ -1,0 +1,37 @@
+{
+  "name": "kursal-tauri",
+  "version": "0.1.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "lsof -i :1420 > /dev/null 2>&1 || bunx --bun vite dev",
+    "build": "bunx --bun vite build",
+    "preview": "bunx --bun vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.0",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "@tauri-apps/plugin-updater": "~2.10.1",
+    "dompurify": "^3.3.3",
+    "lucide-svelte": "^1.0.1",
+    "marked": "^17.0.6",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.56.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tauri-apps/cli": "^2.10.1",
+    "@types/qrcode": "^1.5.6",
+    "svelte": "^5.55.1",
+    "svelte-check": "^4.4.6",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.5"
+  }
+}

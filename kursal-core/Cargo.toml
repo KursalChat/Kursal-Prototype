@@ -1,0 +1,51 @@
+[package]
+name = "kursal-core"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+bincode = { workspace = true }
+zeroize = { workspace = true, features = ["derive"] }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+hex = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+log4rs = { workspace = true }
+rayon = { workspace = true }
+emojis = { workspace = true }
+
+# Crypto
+argon2 = { workspace = true }
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true, features = ["v7"] }
+libsignal-protocol = { workspace = true }
+pqcrypto-dilithium = { workspace = true }
+pqcrypto-traits = { workspace = true }
+
+# Network
+libp2p = { workspace = true }
+
+# Storage
+redb = { workspace = true }
+keyring = { workspace = true }
+keyring-core = { workspace = true }
+
+[dev-dependencies]
+dirs = "6"
