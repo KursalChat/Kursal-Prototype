@@ -57,6 +57,7 @@ cp ../target/x86_64-apple-darwin/release/bundle/macos/Kursal.app.tar.gz.sig ../b
 MAC_X64_SIG=$(cat ../target/x86_64-apple-darwin/release/bundle/macos/Kursal.app.tar.gz.sig)
 
 
+orb
 # ── LINUX (arm64) ─────────────────────────────────────────────────────────────
 docker volume create kursal-cargo-registry-arm64
 docker volume create kursal-cargo-target-arm64
