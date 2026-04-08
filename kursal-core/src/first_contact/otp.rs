@@ -17,7 +17,7 @@ use crate::{
         SharedDatabase, TABLE_LTC_CACHE, TABLE_SETTINGS, get_dilithium_pub, get_timestamp_secs,
     },
 };
-use argon2::{Argon2, Params};
+use argon2::{Argon2, ParamsBuilder};
 use libp2p::PeerId;
 use libsignal_protocol::{DeviceId, ProtocolAddress};
 use rand::{Rng, TryRngCore, distr::Uniform, rngs::OsRng};
@@ -53,9 +53,17 @@ pub fn generate_otp() -> Result<String> {
 }
 
 pub fn hash_otp(otp: &str) -> Result<[u8; 32]> {
-    let params = Params::new(256 * 1024, 4, 4, Some(32))
-        .map_err(|err| KursalError::Crypto(err.to_string()))?;
-    let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+    let argon2 = Argon2::new(
+        argon2::Algorithm::Argon2id,
+        argon2::Version::V0x13,
+        ParamsBuilder::new()
+            .m_cost(256 * 1024)
+            .t_cost(2)
+            .p_cost(1)
+            .output_len(32)
+            .build()
+            .map_err(|err| KursalError::Crypto(err.to_string()))?,
+    );
 
     let mut output = [0u8; 32];
     argon2
@@ -165,10 +173,31 @@ pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) 
 
     let (payload, bundle) = tokio::time::timeout(timeout, async {
         while let Some(bytes) = reply_rx.recv().await {
-            if let Ok(decrypted) = stream_decrypt(&enc_key, &bytes)
-                && let Ok(record) = OtpPayload::deserialize(&decrypted)
-                && let Ok(bundle) = PreKeyBundleData::deserialize(&record.pre_key_bundle)
-            {
+            let dht_record = match DHTRecord::is_valid(&dht_key, &bytes) {
+                Ok(record) => record,
+                Err(err) => {
+                    log::debug!("[otp] Ignoring invalid DHT record: {err}");
+                    continue;
+                }
+            };
+
+            let decrypted = match stream_decrypt(&enc_key, &dht_record.value) {
+                Ok(decrypted) => decrypted,
+                Err(err) => {
+                    log::debug!("[otp] DHT record decrypted failed: {err}");
+                    continue;
+                }
+            };
+
+            let record = match OtpPayload::deserialize(&decrypted) {
+                Ok(record) => record,
+                Err(err) => {
+                    log::debug!("[otp] OTP payload deserialize failed: {err}");
+                    continue;
+                }
+            };
+
+            if let Ok(bundle) = PreKeyBundleData::deserialize(&record.pre_key_bundle) {
                 // decoded. yay!
                 return Some((record, bundle));
             }

@@ -1,7 +1,7 @@
 use crate::{
     KursalError, Result,
     crypto::dilithium::{dilithium_sign, dilithium_verify},
-    network::kademlia::{KAD_MAX_AGE, KAD_MAX_PAYLOAD},
+    network::kademlia::{KAD_MAX_AGE, KAD_MAX_CLOCK_SKEW, KAD_MAX_PAYLOAD},
     storage::get_timestamp_secs,
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -76,13 +76,13 @@ impl DHTRecord {
 
         let now = get_timestamp_secs()?;
 
-        if record.timestamp < now + KAD_MAX_AGE {
+        if record.timestamp < now.saturating_sub(KAD_MAX_AGE) {
             return Err(KursalError::Crypto(
                 "Timestamp in the record too old".to_string(),
             ));
         }
 
-        if record.timestamp > now {
+        if record.timestamp > now.saturating_add(KAD_MAX_CLOCK_SKEW) {
             return Err(KursalError::Crypto(
                 "Timestamp in the record is in the future".to_string(),
             ));

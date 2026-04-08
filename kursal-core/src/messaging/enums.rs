@@ -165,7 +165,7 @@ impl ProfileInfo {
         }
 
         // TODO: maybe allow better rules :p
-        if !self.display_name.chars().all(|c| c.is_ascii()) {
+        if !self.display_name.is_ascii() {
             return Err(KursalError::Identity(
                 "Profile display name must only contain ascii characters.".to_string(),
             ));

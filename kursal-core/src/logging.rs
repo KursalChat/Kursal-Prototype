@@ -1,5 +1,5 @@
-use anyhow::anyhow;
 use crate::{KursalError, Result};
+use anyhow::anyhow;
 use log::LevelFilter;
 use log4rs::{
     Config,

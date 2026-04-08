@@ -2,7 +2,7 @@ use crate::{
     KursalError, Result,
     contacts::Contact,
     identity::TransportIdentity,
-    network::{BOOTSTRAP_PEERS, kademlia::KursalKadStore},
+    network::{BOOTSTRAP_PEERS, kademlia::{KAD_MAX_PAYLOAD, KursalKadStore}},
 };
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
@@ -123,11 +123,16 @@ impl SwarmHandle {
 
                 let relay = relay_client;
                 let dcutr = libp2p::dcutr::Behaviour::new(local_peer_id);
+                
+                let mut kad_config = libp2p::kad::Config::new(StreamProtocol::new("/kursal/kad/1.0.0"));
+                kad_config.set_max_packet_size(KAD_MAX_PAYLOAD);
+
                 let kad = libp2p::kad::Behaviour::with_config(
                     local_peer_id,
                     KursalKadStore::new(local_peer_id),
-                    libp2p::kad::Config::new(StreamProtocol::new("/kursal/kad/1.0.0")),
+                    kad_config,
                 );
+                
 
                 let mdns = libp2p::mdns::tokio::Behaviour::new(mdns::Config {
                     query_interval: Duration::from_secs(20),
@@ -253,9 +258,14 @@ async fn handle_swarm_event(
             libp2p::kad::QueryResult::GetRecord(Ok(
                 libp2p::kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. },
             )) => {
+                log::debug!(
+                    "[kad] GET record query={:?} finished with no additional record",
+                    id
+                );
                 pending_queries.remove(&id);
             }
-            libp2p::kad::QueryResult::GetRecord(Err(_)) => {
+            libp2p::kad::QueryResult::GetRecord(Err(e)) => {
+                log::warn!("[kad] GET record failed query={:?} error={:?}", id, e);
                 pending_queries.remove(&id);
             }
             libp2p::kad::QueryResult::PutRecord(Ok(_)) => {
@@ -397,6 +407,9 @@ async fn handle_swarm_event(
                         .clone()
                         .with(Protocol::P2pCircuit);
                     let _ = swarm.listen_on(circuit_addr);
+
+                    log::info!("[kad] Bootstrapping Kademlia with relay");
+                    let _ = swarm.behaviour_mut().kad.bootstrap();
                 }
             }
 
@@ -482,16 +495,25 @@ fn handle_swarm_command(
             log::info!("mDNS disabled");
         }
         SwarmCommand::PublishDht { key, value } => {
+            log::info!("[kad] Putting record into DHT...");
             let record = libp2p::kad::Record {
                 key: libp2p::kad::RecordKey::new(&key),
                 value,
                 publisher: None,
                 expires: None,
             };
-            let _ = swarm
+            match swarm
                 .behaviour_mut()
                 .kad
-                .put_record(record, libp2p::kad::Quorum::One);
+                .put_record(record, libp2p::kad::Quorum::One) // TODO: maybe more than one?
+            {
+                Ok(query_id) => {
+                    log::info!("[kad] PutRecord started with query_id: {:?}", query_id);
+                }
+                Err(err) => {
+                    log::error!("[kad] Failed to start PutRecord: {:?}", err);
+                }
+            }
         }
         SwarmCommand::FetchDht { key, reply_tx } => {
             let query_id = swarm

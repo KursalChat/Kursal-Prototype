@@ -55,7 +55,7 @@ pub fn cache_dir() -> Result<&'static PathBuf> {
 }
 
 pub fn logs_dir() -> Result<&'static PathBuf> {
-    LOGS_DIR.get().ok_or(KursalError::Storage(
-        "LOGS_DIR not initialized".to_string(),
-    ))
+    LOGS_DIR
+        .get()
+        .ok_or(KursalError::Storage("LOGS_DIR not initialized".to_string()))
 }

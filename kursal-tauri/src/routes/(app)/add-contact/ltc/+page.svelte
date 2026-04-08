@@ -156,7 +156,7 @@
         </div>
       </div>
 
-      <p class="explanation">Generate a .kursal file for offline sharing.</p>
+      <p class="explanation">Generate a .kursal file for long term sharing.</p>
 
       <Button variant="primary" loading={exporting} onclick={handleExport}>
         <Download size={14} />

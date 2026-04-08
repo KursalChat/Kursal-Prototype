@@ -3,8 +3,9 @@ use libp2p::PeerId;
 use libp2p::kad::store::RecordStore;
 use libp2p::kad::{ProviderRecord, Record, store::MemoryStore};
 
-pub const KAD_MAX_PAYLOAD: usize = 10 * 1024;
+pub const KAD_MAX_PAYLOAD: usize = 64 * 1024;
 pub const KAD_MAX_AGE: u64 = 30 * 60;
+pub const KAD_MAX_CLOCK_SKEW: u64 = 120;
 
 pub struct KursalKadStore {
     inner: MemoryStore,
@@ -23,8 +24,9 @@ impl RecordStore for KursalKadStore {
     type ProvidedIter<'a> = <MemoryStore as RecordStore>::ProvidedIter<'a>;
 
     fn put(&mut self, r: Record) -> libp2p::kad::store::Result<()> {
-        if DHTRecord::is_valid(&r.key.to_vec(), &r.value).is_err() {
+        if let Err(err) = DHTRecord::is_valid(&r.key.to_vec(), &r.value) {
             // FIXME: there's no better error type for this i guess
+            log::debug!("[kad] refused to store entry: {err}");
             return Err(libp2p::kad::store::Error::ValueTooLarge);
         }
 

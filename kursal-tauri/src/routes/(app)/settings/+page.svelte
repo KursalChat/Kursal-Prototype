@@ -1,26 +1,18 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { onMount } from "svelte";
-  import {
-    Shield,
-    User,
-    Zap,
-    Wifi,
-    Upload,
-    Image as ImageIcon,
-  } from "lucide-svelte";
-  import {
-    rotatePeerId,
-    broadcastProfile,
-  } from "$lib/api/identity";
+  import { Shield, User, Zap, Wifi, Upload, Activity } from "lucide-svelte";
+  import { rotatePeerId, broadcastProfile } from "$lib/api/identity";
   import { profileState } from "$lib/state/profile.svelte";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
   import Button from "$lib/components/Button.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
+  import Benchmark from "$lib/components/Benchmark.svelte";
   import { confirm } from "@tauri-apps/plugin-dialog";
+  import { getVersion } from "@tauri-apps/api/app";
 
-  type SettingsCategory = "account" | "security" | "network" | "advanced";
+  type SettingsCategory = "account" | "security" | "network" | "benchmarks" | "advanced";
 
   let activeCategory = $state<SettingsCategory>("account");
 
@@ -28,6 +20,7 @@
     { id: "account" as const, label: "Account", icon: User },
     { id: "security" as const, label: "Security", icon: Shield },
     { id: "network" as const, label: "Network", icon: Wifi },
+    { id: "benchmarks" as const, label: "Benchmarks", icon: Activity },
     { id: "advanced" as const, label: "Advanced", icon: Zap },
   ];
 
@@ -36,6 +29,7 @@
   let avatarBytes = $state<number[] | null>(null);
   let rotating = $state(false);
   let savingProfile = $state(false);
+  let appVersion = $state("...");
 
   onMount(async () => {
     if (!browser) return;
@@ -43,6 +37,13 @@
     displayName = profileState.displayName;
     avatarBase64 = profileState.avatarBase64;
     avatarBytes = profileState.avatarBytes;
+
+    try {
+      appVersion = `v${await getVersion()}`;
+    } catch (e) {
+      console.error("Failed to load app version", e);
+      appVersion = "Unknown";
+    }
   });
 
   async function handleAvatarSelection(event: Event) {
@@ -98,7 +99,7 @@
       const base64Data = dataUrl.split(",")[1];
       avatarBase64 = base64Data;
       avatarBytes = Array.from(
-        Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0))
+        Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0)),
       );
     } catch (e) {
       console.error("Avatar compression failed", e);
@@ -189,7 +190,10 @@
             {#if avatarBase64}
               <button
                 class="text-btn danger-text"
-                onclick={() => { avatarBase64 = null; avatarBytes = null; }}
+                onclick={() => {
+                  avatarBase64 = null;
+                  avatarBytes = null;
+                }}
               >
                 Remove
               </button>
@@ -265,19 +269,31 @@
           </p>
         </div>
       </div>
+    {:else if activeCategory === "benchmarks"}
+      <div class="settings-section">
+        <div class="section-header">
+          <h3>Benchmarks</h3>
+          <p>Test the cryptographic and computational capabilities of your device.</p>
+        </div>
+        
+        <Benchmark 
+          name="OTP Hashing" 
+          description="Measures the device's capability to generate and hash OTPs using Argon2id." 
+        />
+      </div>
     {:else if activeCategory === "advanced"}
       <div class="settings-section">
         <div class="section-header">
           <h3>Advanced</h3>
-          <p>App info and diagnostics.</p>
+          <p>
+            App info and diagnostics. The settings tab will be completely
+            reworked in the future.
+          </p>
         </div>
 
         <div class="app-info">
           <div class="info-item">
-            <span>Version</span><span>Kursal v0.1.0</span>
-          </div>
-          <div class="info-item">
-            <span>Build</span><span>Desktop / Tauri</span>
+            <span>Version</span><span>Kursal {appVersion}</span>
           </div>
           <div class="info-item">
             <span>Contacts</span><span>{contactsState.contacts.length}</span>

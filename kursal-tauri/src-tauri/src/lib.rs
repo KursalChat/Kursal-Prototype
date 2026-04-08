@@ -15,6 +15,7 @@ use std::{collections::HashMap, sync::Arc};
 use tauri::{AppHandle, Emitter, Manager, async_runtime::block_on};
 use tokio::sync::{Mutex, mpsc, oneshot::Sender};
 
+pub mod benchmark;
 pub mod commands;
 pub mod dirs;
 pub mod dto;
@@ -32,7 +33,7 @@ struct Args {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    let tauri = tauri::Builder::default();
+    let tauri = tauri::Builder::default().plugin(tauri_plugin_clipboard_manager::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let tauri = tauri::Builder::default().plugin(tauri_plugin_updater::Builder::new().build());
@@ -72,7 +73,11 @@ pub fn run() {
                 unsafe_write_key_to_file: args.unsafe_write_key_to_file,
             };
 
-            log::info!("About to init identity (db_path={}, storage_id={})", db_path.display(), keychain_config.storage_id);
+            log::info!(
+                "About to init identity (db_path={}, storage_id={})",
+                db_path.display(),
+                keychain_config.storage_id
+            );
 
             let db = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 block_on(identity::init(&db_path, &keychain_config, app_data_dir))
@@ -183,6 +188,10 @@ pub fn run() {
             commands::get_local_user_profile,
             commands::broadcast_profile,
             commands::share_profile,
+            //
+            benchmark::run_otp_benchmark,
+            benchmark::cancel_benchmark,
+            benchmark::is_benchmark_running,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

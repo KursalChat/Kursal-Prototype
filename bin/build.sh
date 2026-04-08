@@ -19,16 +19,23 @@ bun run build
 
 
 # ── WINDOWS (x64) ─────────────────────────────────────────────────────────────
+rm -f ../target/x86_64-pc-windows-msvc/release/kursal-app.exe
+rm -rf ../target/x86_64-pc-windows-msvc/release/bundle/
+
 bun tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --config '{"build":{"beforeBuildCommand":""}}'
 
 cp ../target/x86_64-pc-windows-msvc/release/kursal-app.exe ../build/Kursal_x64.exe
 cp ../target/x86_64-pc-windows-msvc/release/bundle/nsis/Kursal_*_x64-setup.exe ../build/Kursal_x64-setup.exe
 cp ../target/x86_64-pc-windows-msvc/release/bundle/nsis/Kursal_*_x64-setup.exe.sig ../build/Kursal_x64-setup.exe.sig
 
+upx --best --lzma ../build/Kursal_x64.exe # always useful
+
 WIN_X64_SIG=$(cat ../target/x86_64-pc-windows-msvc/release/bundle/nsis/Kursal_*_x64-setup.exe.sig)
 
 
 # ── MAC (aarch64) ─────────────────────────────────────────────────────────────
+rm -rf ../target/aarch64-apple-darwin/release/bundle/
+
 bun tauri build --bundles app,dmg,updater --target aarch64-apple-darwin --config '{"build":{"beforeBuildCommand":""}}'
 
 cp ../target/aarch64-apple-darwin/release/bundle/dmg/Kursal_*.dmg ../build/Kursal.dmg
@@ -39,6 +46,8 @@ MAC_ARM_SIG=$(cat ../target/aarch64-apple-darwin/release/bundle/macos/Kursal.app
 
 
 # ── MAC (x86_64) ─────────────────────────────────────────────────────────────
+rm -rf ../target/x86_64-apple-darwin/release/bundle
+
 bun tauri build --bundles app,dmg,updater --target x86_64-apple-darwin --config '{"build":{"beforeBuildCommand":""}}'
 
 cp ../target/x86_64-apple-darwin/release/bundle/dmg/Kursal_*.dmg ../build/Kursal_x64.dmg
@@ -81,6 +90,7 @@ _run_arm64() {
       export PATH="$HOME/.bun/bin:$PATH" &&
       bun install &&
       rustup upgrade &&
+      rm -rf /root/kursal-target/release/bundle/ &&
       export TAURI_SIGNING_PRIVATE_KEY=$(cat /workspace/keys/publishing.key) &&
       export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$(cat /workspace/keys/publishing.key.pwd) &&
       export CARGO_TARGET_DIR=/root/kursal-target &&
@@ -138,6 +148,7 @@ _run_x64() {
       export PATH="$HOME/.bun/bin:$PATH" &&
       bun install &&
       rustup upgrade &&
+      rm -rf /root/kursal-target/release/bundle/ &&
       export TAURI_SIGNING_PRIVATE_KEY=$(cat /workspace/keys/publishing.key) &&
       export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$(cat /workspace/keys/publishing.key.pwd) &&
       export CARGO_TARGET_DIR=/root/kursal-target &&
@@ -163,8 +174,9 @@ LINUX_X64_SIG=$(cat ../build/Kursal_x64.AppImage.sig)
 
 
 # ── ANDROID ───────────────────────────────────────────────────────────────────
-rm -f src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
-JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home PATH=$JAVA_HOME/bin:$PATH bun tauri android build --apk --target aarch64 --config '{"build":{"beforeBuildCommand":""}}'
+rm -rf src-tauri/gen/android/app/build/outputs/apk/universal/release/
+
+JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home PATH=$JAVA_HOME/bin:$PATH bun tauri android build --apk --target aarch64 --config '{"build":{"beforeBuildCommand":""}}'
 cp -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk ../build/Kursal.apk
 
 
