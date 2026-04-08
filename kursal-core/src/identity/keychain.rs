@@ -33,12 +33,12 @@ pub fn store_master_secret(
     entry: &Option<Entry>,
     app_data_dir: &Path,
 ) -> Result<()> {
-    if secret.len() < MASTER_SECRET_LEN {
+    if secret.len() != MASTER_SECRET_LEN {
         return Err(KursalError::Crypto(format!(
-            "Master secret must be at least {MASTER_SECRET_LEN} bytes"
+            "Master secret must be exactly {MASTER_SECRET_LEN} bytes"
         )));
     }
-    
+
     let hex_secret = hex::encode(secret);
 
     if config.unsafe_write_key_to_file {
@@ -46,19 +46,15 @@ pub fn store_master_secret(
             "UNSAFE! Writing master secret to a file is DANGEROUS and should be used with care! Like for debugging purposes!"
         );
         let path = app_data_dir.join(format!("{}.key", config.storage_id));
-
         std::fs::write(path, hex_secret).map_err(|err| KursalError::Storage(err.to_string()))?;
     } else {
-        // TODO: determine if it's needed or not
-        // let _ = entry.delete_credential();
-        if let Err(err) = entry
+        let entry_ref = entry
             .as_ref()
-            .expect("Entry must be defined when write_to_file is false")
+            .ok_or_else(|| KursalError::Storage("Missing keychain entry".to_string()))?;
+
+        entry_ref
             .set_secret(hex_secret.as_bytes())
-        {
-            // TODO: use other method instead?
-            return Err(KursalError::Storage(err.to_string()));
-        }
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
     }
 
     Ok(())
@@ -74,14 +70,13 @@ pub fn load_master_secret(
             "UNSAFE! Reading master secret to a file is DANGEROUS and should be used with care! Like for debugging purposes!"
         );
         let path = app_data_dir.join(format!("{}.key", config.storage_id));
-
         std::fs::read(path).ok()
     } else {
-        match entry
+        let entry_ref = entry
             .as_ref()
-            .expect("Entry must be defined when write_to_file is false")
-            .get_secret()
-        {
+            .ok_or_else(|| KursalError::Storage("Missing keychain entry".to_string()))?;
+
+        match entry_ref.get_secret() {
             Ok(secret) => Some(secret),
             Err(keyring_core::Error::NoEntry) => None,
             Err(err) => return Err(KursalError::Storage(err.to_string())),
@@ -89,22 +84,15 @@ pub fn load_master_secret(
     };
 
     if let Some(secret) = raw_secret {
-        // Try decoding assuming it's our new hex-encoded format
         if let Ok(decoded) = hex::decode(&secret) {
             if decoded.len() == MASTER_SECRET_LEN {
                 return Ok(Some(decoded));
             }
         }
-        
-        // Fallback for legacy un-encoded binary secret (can be physically corrupted on macos!)
-        if secret.len() == MASTER_SECRET_LEN {
-            return Ok(Some(secret));
-        }
 
-        // If it got here, the key exists but is corrupted (likely due to macos keychain stripping null bytes from binary data)
         return Err(KursalError::Crypto(format!(
             "Stored master secret is corrupted. Expected {} bytes, found {}",
-            MASTER_SECRET_LEN,
+            MASTER_SECRET_LEN * 2,
             secret.len()
         )));
     }

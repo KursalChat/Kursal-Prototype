@@ -41,7 +41,8 @@
     "category": "public.app-category.social-networking",
     "macOS": {
       "entitlements": "entitlements.mac.plist",
-      "minimumSystemVersion": "14.0"
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "kursal"
     },
     "shortDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control.",
     "longDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control. No servers. No tracking. Just your private conversations.",

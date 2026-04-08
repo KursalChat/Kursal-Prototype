@@ -3,7 +3,7 @@ members = ["kursal-cli", "kursal-core", "kursal-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.2"
+version = "0.0.1-alpha.3"
 authors = ["Kodeur_Kubik <kubik@kursal.chat>", "Arlo <arlo@kursal.chat>"]
 edition = "2024"
 license = "AGPL-3.0-only"
