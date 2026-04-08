@@ -445,3 +445,17 @@ pub async fn share_profile(
 
     Ok(())
 }
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+pub async fn check_for_updates(app: tauri::AppHandle) -> std::result::Result<(), String> {
+    crate::check_for_updates_impl(app, true)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub async fn check_for_updates(_app: tauri::AppHandle) -> std::result::Result<(), String> {
+    Err("Updates are handled by the app store on mobile devices.".to_string())
+}

@@ -222,8 +222,8 @@ echo "=> make sure to write some release notes in it :p"
 
 # and run this in parallel (pain) - https://github.com/tauri-apps/tauri/issues/14940
 # xcodebuild archive \
-#          -project gen/apple/${NAME}.xcodeproj \
-#          -scheme "${NAME}"_iOS \
+#          -project gen/apple/kursal-app.xcodeproj \
+#          -scheme kursal-app_iOS \
 #          -archivePath gen/apple/build/App.xcarchive \
 #          -configuration Release
 #          CODE_SIGNING_REQUIRED=NO 

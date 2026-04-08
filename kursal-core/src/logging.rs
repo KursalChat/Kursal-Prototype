@@ -8,9 +8,7 @@ use log4rs::{
         rolling_file::{
             RollingFileAppender,
             policy::compound::{
-                CompoundPolicy,
-                roll::fixed_window::FixedWindowRoller,
-                trigger::time::{TimeTrigger, TimeTriggerConfig},
+                CompoundPolicy, roll::fixed_window::FixedWindowRoller, trigger::size::SizeTrigger,
             },
         },
     },
@@ -33,13 +31,11 @@ pub fn init_logging(log_level: &str, log_file: Option<&str>) -> Result<()> {
     let root = match log_file {
         None => Root::builder().appender("stdout").build(level),
         Some(path) => {
-            // Ensure the parent directory exists
             if let Some(parent) = std::path::Path::new(path).parent() {
                 std::fs::create_dir_all(parent)
                     .map_err(|err| KursalError::Misc(anyhow!("Failed to create log dir: {err}")))?;
             }
 
-            // Touch the file so fern/log4rs can open it
             std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -50,8 +46,8 @@ pub fn init_logging(log_level: &str, log_file: Option<&str>) -> Result<()> {
                 .build(&format!("{path}.{{}}.gz"), 7)
                 .map_err(|err| KursalError::Misc(anyhow!(err)))?;
 
-            let trigger = TimeTrigger::new(TimeTriggerConfig::default());
-
+            // Rotate when log file reaches 10 MB
+            let trigger = SizeTrigger::new(10 * 1024 * 1024);
             let policy = CompoundPolicy::new(Box::new(trigger), Box::new(roller));
 
             let file = RollingFileAppender::builder()

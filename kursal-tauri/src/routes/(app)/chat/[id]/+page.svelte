@@ -164,15 +164,18 @@
         !trustedHosts.has(url.hostname)
       ) {
         const approved = await confirm(
-          `Open external link in browser?\n\nHost: ${url.hostname}\nPath: ${url.pathname || "/"}`,
+          `Open external link in browser?\n\n${url.toString()}`,
           { title: "Open External Link", kind: "warning" },
         );
         if (!approved) return;
       }
 
       await openUrl(url.toString());
-    } catch {
-      notifications.push("Invalid link", "error");
+    } catch (e) {
+      notifications.push(
+        `Failed to open link: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
     }
   }
 

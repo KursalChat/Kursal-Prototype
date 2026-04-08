@@ -11,8 +11,14 @@
   import Benchmark from "$lib/components/Benchmark.svelte";
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { getVersion } from "@tauri-apps/api/app";
+  import { invoke } from "@tauri-apps/api/core";
 
-  type SettingsCategory = "account" | "security" | "network" | "benchmarks" | "advanced";
+  type SettingsCategory =
+    | "account"
+    | "security"
+    | "network"
+    | "benchmarks"
+    | "advanced";
 
   let activeCategory = $state<SettingsCategory>("account");
 
@@ -30,6 +36,7 @@
   let rotating = $state(false);
   let savingProfile = $state(false);
   let appVersion = $state("...");
+  let checkingForUpdates = $state(false);
 
   onMount(async () => {
     if (!browser) return;
@@ -141,6 +148,17 @@
       console.error("Rotate failed:", e);
     } finally {
       rotating = false;
+    }
+  }
+
+  async function handleCheckForUpdates() {
+    checkingForUpdates = true;
+    try {
+      await invoke("check_for_updates");
+    } catch (e) {
+      notifications.push(`Update check failed: ${e}`, "error");
+    } finally {
+      checkingForUpdates = false;
     }
   }
 </script>
@@ -273,12 +291,15 @@
       <div class="settings-section">
         <div class="section-header">
           <h3>Benchmarks</h3>
-          <p>Test the cryptographic and computational capabilities of your device.</p>
+          <p>
+            Test the cryptographic and computational capabilities of your
+            device.
+          </p>
         </div>
-        
-        <Benchmark 
-          name="OTP Hashing" 
-          description="Measures the device's capability to generate and hash OTPs using Argon2id." 
+
+        <Benchmark
+          name="OTP Hashing"
+          description="Measures the device's capability to generate and hash OTPs using Argon2id."
         />
       </div>
     {:else if activeCategory === "advanced"}
@@ -299,6 +320,14 @@
             <span>Contacts</span><span>{contactsState.contacts.length}</span>
           </div>
           <div class="info-item"><span>License</span><span>AGPL-3.0</span></div>
+        </div>
+
+        <div class="info-card" style="margin-top: 24px;">
+          <p class="info-label">Software Updates</p>
+          <p style="margin-bottom: 12px; font-size: 14px; color: var(--text-secondary);">Check to see if there is a newer version of Kursal available to download.</p>
+          <Button onclick={handleCheckForUpdates} loading={checkingForUpdates}
+            >Check for Updates</Button
+          >
         </div>
       </div>
     {/if}

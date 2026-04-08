@@ -32,13 +32,16 @@ struct Args {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    let tauri = tauri::Builder::default().plugin(tauri_plugin_clipboard_manager::init());
+    let mut builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let tauri = tauri::Builder::default().plugin(tauri_plugin_updater::Builder::new().build());
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
 
-    tauri
+    builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -157,7 +160,7 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = update(handle).await;
+                    let _ = check_for_updates_impl(handle, false).await;
                 });
             }
 
@@ -188,6 +191,7 @@ pub fn run() {
             commands::get_local_user_profile,
             commands::broadcast_profile,
             commands::share_profile,
+            commands::check_for_updates,
             //
             benchmark::run_otp_benchmark,
             benchmark::cancel_benchmark,
@@ -357,8 +361,11 @@ async fn handle_core_event(
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
-    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+pub(crate) async fn check_for_updates_impl(
+    app: AppHandle,
+    manual: bool,
+) -> tauri_plugin_updater::Result<()> {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
     use tauri_plugin_updater::UpdaterExt;
 
     if let Some(update) = app.updater()?.check().await? {
@@ -385,8 +392,6 @@ async fn update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
             return Ok(());
         }
 
-        // TODO: ask for update
-
         let mut downloaded = 0;
 
         update
@@ -405,8 +410,10 @@ async fn update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
 
         let do_restart = app
             .dialog()
-            .message("Would you like to restart Kursal to apply the update?")
-            .title("Restart App?")
+            .message(
+                "Would you like to restart Kursal to apply the update? You can also restart later.",
+            )
+            .title("Update Installed")
             .buttons(MessageDialogButtons::OkCancelCustom(
                 "Restart now".to_string(),
                 "Later".to_string(),
@@ -416,6 +423,12 @@ async fn update(app: AppHandle) -> tauri_plugin_updater::Result<()> {
         if do_restart {
             app.restart();
         }
+    } else if manual {
+        app.dialog()
+            .message("You're all set! Kursal is currently running the newest version available.")
+            .title("No Updates Available")
+            .kind(MessageDialogKind::Info)
+            .blocking_show();
     }
 
     Ok(())

@@ -217,7 +217,7 @@ pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) 
     let contact = Contact {
         user_id: UserId(user_id),
         peer_id: payload.peer_id.clone(),
-        display_name: payload.peer_id.clone(),
+        display_name: make_username(&payload.peer_id),
         avatar_bytes: None,
         identity_pub_key,
         dilithium_pub_key: payload.dilithium_pub_key,
