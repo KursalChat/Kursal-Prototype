@@ -102,6 +102,7 @@ impl PreKeyBundleData {
 
         let (prekey_id, prekey) = {
             if with_prekey {
+                // TODO: this could just generate a new prekey instead
                 let prekey_id = PreKeyId::from(1u32);
 
                 (

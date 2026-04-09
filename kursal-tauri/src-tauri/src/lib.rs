@@ -199,6 +199,7 @@ pub fn run() {
             commands::remove_contact,
             commands::send_text,
             commands::get_messages,
+            commands::delete_local_message,
             commands::get_security_code,
             commands::confirm_security_code,
             commands::set_contact_blocked,
@@ -411,8 +412,8 @@ pub(crate) async fn check_for_updates_impl(
             .dialog()
             .message(format!(
                 "Version {} is available! (you are on {}){}",
-                update.current_version,
                 update.version,
+                update.current_version,
                 update
                     .body
                     .as_ref()

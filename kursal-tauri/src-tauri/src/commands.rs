@@ -260,6 +260,31 @@ pub async fn send_text(
 }
 
 #[tauri::command]
+pub async fn delete_local_message(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    message_id: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::DeleteLocalMessage {
+            contact_id,
+            message_id,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_messages(
     state: tauri::State<'_, AppState>,
     contact_id: String,

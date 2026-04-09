@@ -495,6 +495,11 @@ pub enum CoreCommand {
         contact_id: String,
         reply: oneshot::Sender<Result<()>>,
     },
+    DeleteLocalMessage {
+        contact_id: String,
+        message_id: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
     ShareProfile {
         contact_id: String,
         display_name: String,
@@ -731,6 +736,33 @@ pub async fn handle_core_command(
                     })
                     .await
                     .map_err(|err| KursalError::Network(err.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::DeleteLocalMessage {
+            contact_id,
+            message_id,
+            reply,
+        } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+                let user_id = UserId(user_id_bytes);
+
+                let id_bytes: [u8; 16] = hex::decode(&message_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid message id length".into()))?;
+                let msg_id = MessageId(id_bytes);
+
+                StoredMessage::delete(&*db.0.lock().await, &user_id, &msg_id)?;
 
                 Ok(())
             }

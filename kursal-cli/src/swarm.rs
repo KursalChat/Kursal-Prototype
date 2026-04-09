@@ -44,6 +44,7 @@ pub async fn spawn_relay_swarm(config: &RelayConfig, config_path: &Path) -> Resu
         )
         .map_err(|err| KursalError::Network(err.to_string()))?
         .with_quic()
+        // `.with_dns()` wont work on android, hope no one tries to run the CLI on android 😭
         .with_dns()
         .map_err(|err| KursalError::Network(err.to_string()))?
         .with_behaviour(

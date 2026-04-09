@@ -1,7 +1,7 @@
 use crate::{
     KursalError, Result,
     crypto::stream::{stream_decrypt, stream_encrypt},
-    identity::UserId,
+    identity::{UserId, generators},
 };
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
 use async_trait::async_trait;
@@ -473,6 +473,12 @@ impl PreKeyStore for SharedDatabase {
             .raw_delete(TABLE_PRE_KEYS, &key)
             .map_err(|err| SignalProtocolError::InvalidArgument(err.to_string()))?;
 
+        // TODO: maybe something better
+        // immediatly re-generates a prekey to avoid running out
+        generators::generate_pre_key(self.clone())
+            .await
+            .map_err(|e| SignalProtocolError::InvalidArgument(e.to_string()))?;
+
         Ok(())
     }
 }
@@ -539,7 +545,7 @@ impl KyberPreKeyStore for SharedDatabase {
 
         match bytes {
             None => Err(SignalProtocolError::InvalidArgument(
-                "Kyber Pre Key Store not found".to_string(),
+                "Kyber Pre Key not found".to_string(),
             )),
             Some(b) => {
                 let parsed = KyberPreKeyRecord::deserialize(&b)?;
@@ -579,6 +585,13 @@ impl KyberPreKeyStore for SharedDatabase {
             .await
             .raw_delete(TABLE_KYBER_PRE_KEYS, &key)
             .map_err(|err| SignalProtocolError::InvalidArgument(err.to_string()))?;
+
+        // TODO: maybe something better
+        // immediatly re-generates a prekey to avoid running out
+        let identity = self.get_identity_key_pair().await?;
+        generators::generate_kyber_prekey(self.clone(), &identity)
+            .await
+            .map_err(|e| SignalProtocolError::InvalidArgument(e.to_string()))?;
 
         Ok(())
     }

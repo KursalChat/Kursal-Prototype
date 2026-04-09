@@ -3,11 +3,11 @@ members = ["kursal-cli", "kursal-core", "kursal-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.4"
+version = "0.0.1-alpha.5"
 authors = ["Kodeur_Kubik <kubik@kursal.chat>", "Arlo <arlo@kursal.chat>"]
 edition = "2024"
 license = "AGPL-3.0-only"
-rust-version = "1.94"
+rust-version = "1.88" # lets keep it the same as libsignal
 homepage = "https://kursal.chat"
 repository = "https://github.com/KursalChat/Kursal"
 

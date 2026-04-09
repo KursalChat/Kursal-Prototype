@@ -105,7 +105,7 @@ impl SwarmHandle {
         event_tx: mpsc::Sender<NetworkEvent>,
         relay_server_enabled: bool,
     ) -> Result<Self> {
-        let mut swarm = SwarmBuilder::with_existing_identity(identity.keypair)
+        let swarm = SwarmBuilder::with_existing_identity(identity.keypair)
             .with_tokio()
             .with_tcp(
                 Default::default(),
@@ -113,9 +113,17 @@ impl SwarmHandle {
                 libp2p::yamux::Config::default,
             )
             .map_err(|err| KursalError::Network(format!("swarm tcp error: {err}")))?
-            .with_quic()
-            .with_dns()
-            .map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?
+            .with_quic();
+
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        // TODO: maybe chance cloudflare to another DNS
+        let swarm = swarm.with_dns_config(libp2p::dns::ResolverConfig::cloudflare(), libp2p::dns::ResolverOpts::default());
+        
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let swarm = swarm.with_dns().map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?;
+
+
+        let mut swarm = swarm
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)
             .map_err(|err| KursalError::Network(format!("swarm relay error: {err}")))?
             .with_behaviour(|key, relay_client|  -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {

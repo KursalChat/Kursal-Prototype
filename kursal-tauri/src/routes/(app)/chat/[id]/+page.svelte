@@ -6,7 +6,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
-  import { sendText } from "$lib/api/messages";
+  import { sendText, deleteLocalMessage } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
@@ -329,6 +329,13 @@
   async function handleResend(msg: import("$lib/types").MessageResponse) {
     if (!contactId) return;
 
+    // Remove the failed message from the database first
+    try {
+      await deleteLocalMessage(msg.contactId, msg.id);
+    } catch (e) {
+      console.error("Failed to delete local message before resend", e);
+    }
+
     // Attempt sending again
     messagesState.removeLocally(msg.id, msg.contactId);
 
@@ -503,8 +510,15 @@
                         <button
                           type="button"
                           class="failed-btn"
-                          onclick={() =>
-                            messagesState.removeLocally(msg.id, msg.contactId)}
+                          onclick={async () => {
+                            try {
+                              await deleteLocalMessage(msg.contactId, msg.id);
+                              messagesState.removeLocally(msg.id, msg.contactId);
+                            } catch (e) {
+                              console.error("Failed to delete local message", e);
+                              notifications.push("Failed to delete message", "error");
+                            }
+                          }}
                           >Delete</button
                         >
                       </div>

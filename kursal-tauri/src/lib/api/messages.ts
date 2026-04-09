@@ -4,6 +4,9 @@ import type { MessageResponse } from '$lib/types';
 export const sendText = (contactId: string, text: string, replyTo: string | null = null): Promise<string> =>
   invoke('send_text', { contactId, text, replyTo });
 
+export const deleteLocalMessage = (contactId: string, messageId: string): Promise<void> =>
+  invoke('delete_local_message', { contactId, messageId });
+
 export const getMessages = async (
   contactId: string,
   limit = 100,

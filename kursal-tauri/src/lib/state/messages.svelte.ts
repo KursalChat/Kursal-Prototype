@@ -20,14 +20,14 @@ function createMessagesState() {
       const msgs = await getMessages(contactId);
       const now = Date.now();
       msgs.forEach((m) => {
-        if (m.status === "sending" && now - m.timestamp > 30000) {
+        if (m.status === "sending" && now - m.timestamp > 15000) {
           m.status = "failed";
         } else if (m.status === "sending") {
           setTimeout(
             () => {
               updateStatusIfSending(m.id, contactId, "failed");
             },
-            30000 - (now - m.timestamp),
+            15000 - (now - m.timestamp),
           );
         }
       });
@@ -62,7 +62,7 @@ function createMessagesState() {
     map[msg.contactId] = [...map[msg.contactId]];
     setTimeout(() => {
       updateStatusIfSending(msg.id, msg.contactId, "failed");
-    }, 30000);
+    }, 15000);
   }
 
   function updateStatus(
