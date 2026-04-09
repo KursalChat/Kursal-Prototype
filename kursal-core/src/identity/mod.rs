@@ -49,6 +49,12 @@ pub async fn init(
         if let Some(master_key) = load_master_secret(keychain_config, &entry, app_data_dir)? {
             master_key
         } else {
+            if db_path.exists() {
+                return Err(KursalError::Storage(
+                    "Database exists but master_key could not be found.".to_string(),
+                ));
+            }
+
             let generated = generate_master_secret()?;
             store_master_secret(&generated, keychain_config, &entry, app_data_dir)?;
 

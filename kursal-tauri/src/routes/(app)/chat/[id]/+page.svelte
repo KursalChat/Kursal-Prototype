@@ -394,6 +394,9 @@
               status={contactsState.connectionStatus[contact.userId] ??
                 "disconnected"}
             />
+            <span class="status-summary">
+              {contactsState.connectionStatus[contact.userId] === 'disconnected' || !contactsState.connectionStatus[contact.userId] ? 'offline' : contactsState.connectionStatus[contact.userId]}
+            </span>
           </div>
           <p class="peer-id">ID: {contact.userId.slice(0, 12)}...</p>
         </button>
@@ -668,6 +671,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .status-summary {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: normal;
   }
 
   .header-left {

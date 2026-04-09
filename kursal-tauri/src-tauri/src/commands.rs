@@ -1,8 +1,8 @@
 use crate::dto::{ContactResponse, MessageResponse, NearbyPeerResponse, OtpResponse};
 use crate::error::Result;
-use crate::state::AppState;
 use kursal_core::KursalError;
 use kursal_core::api::CoreCommand;
+use kursal_core::api::state::AppState;
 use kursal_core::contacts::Contact;
 use kursal_core::first_contact::nearby::{NearbyBeacon, generate_session_name};
 use kursal_core::first_contact::otp;
@@ -12,6 +12,7 @@ use kursal_core::messaging::enums::MessageId;
 use kursal_core::storage::{
     get_dilithium_pub, get_local_identity_pub, get_local_profile, set_local_profile,
 };
+use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
 
 #[tauri::command]
@@ -458,4 +459,14 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> std::result::Result<(),
 #[tauri::command]
 pub async fn check_for_updates(_app: tauri::AppHandle) -> std::result::Result<(), String> {
     Err("Updates are handled by the app store on mobile devices.".to_string())
+}
+
+#[tauri::command]
+pub async fn open_log_folder(app: tauri::AppHandle) -> Result<()> {
+    if let Ok(log_dir) = crate::dirs::logs_dir() {
+        app.opener()
+            .open_path(log_dir.to_string_lossy(), None::<&str>)
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
+    }
+    Ok(())
 }

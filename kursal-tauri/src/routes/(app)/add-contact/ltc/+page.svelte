@@ -29,7 +29,7 @@
         defaultPath: "kursal-contact.kursal",
         filters: [
           {
-            name: "Kursal contact file",
+            name: "Kursal data file",
             extensions: ["kursal"],
           },
         ],

@@ -329,6 +329,14 @@
             >Check for Updates</Button
           >
         </div>
+
+        <div class="info-card" style="margin-top: 24px;">
+          <p class="info-label">Diagnostics</p>
+          <p style="margin-bottom: 12px; font-size: 14px; color: var(--text-secondary);">Open the directory containing application logs for troubleshooting issues.</p>
+          <Button onclick={async () => await invoke('open_log_folder')}
+            >Open Log Folder</Button
+          >
+        </div>
       </div>
     {/if}
   </section>

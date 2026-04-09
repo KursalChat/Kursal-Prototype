@@ -24,13 +24,15 @@ use crate::{
         rendezvous::publish_rendezvous,
         swarm::{SwarmCommand, str_to_multiaddr},
     },
-    storage::{SharedDatabase, TABLE_SETTINGS, get_timestamp_secs},
+    storage::{SharedDatabase, TABLE_SETTINGS, file::KursalFile, get_timestamp_secs},
 };
 use libp2p::PeerId;
 use libsignal_protocol::{DeviceId, ProtocolAddress};
 use std::{str::FromStr, sync::Arc};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use zeroize::Zeroize;
+
+pub mod state;
 
 pub enum ConnectionStatus {
     Connecting,
@@ -529,13 +531,21 @@ pub async fn handle_core_command(
             let net = network.lock().await;
             let result = LtcPayload::generate(db, &net)
                 .await
+                .and_then(|p| p.serialize())
+                .map(|res| KursalFile::LtcPayload(res))
                 .and_then(|p| p.serialize());
+
             reply.send(result).ok();
         }
 
         CoreCommand::ImportLtc { bytes, reply } => {
             let net = network.lock().await;
-            let result = LtcPayload::deserialize(&bytes);
+
+            let result = match KursalFile::deserialize(&bytes) {
+                Ok(KursalFile::LtcPayload(bytes)) => LtcPayload::deserialize(&bytes),
+                _ => Err(KursalError::Identity("Invalid file type".to_string())),
+            };
+
             let result = match result {
                 Ok(payload) => payload.import_ltc(db, &net).await,
                 Err(e) => Err(e),
@@ -729,4 +739,8 @@ pub async fn handle_core_command(
             reply.send(result).ok();
         }
     }
+}
+
+pub fn get_protocol_addr(user_id: [u8; 32]) -> ProtocolAddress {
+    ProtocolAddress::new(hex::encode(user_id), DeviceId::new(1u8).unwrap())
 }

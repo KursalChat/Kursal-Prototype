@@ -1,6 +1,7 @@
 use crate::{
     KursalError, Result,
     crypto::stream::{stream_decrypt, stream_encrypt},
+    identity::UserId,
 };
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
 use async_trait::async_trait;
@@ -12,10 +13,12 @@ use libsignal_protocol::{
     SignedPreKeyRecord, SignedPreKeyStore,
 };
 use redb::{ReadableDatabase, ReadableTable, TableDefinition};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::{array::TryFromSliceError, path::Path, sync::Arc, time::SystemTime};
 use tokio::sync::Mutex;
 use zeroize::Zeroizing;
+
+pub mod file;
 
 pub const TABLE_SESSIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("sessions");
 pub const TABLE_IDENTITY_KEYS: TableDefinition<&str, &[u8]> = TableDefinition::new("identity_keys");
@@ -590,6 +593,13 @@ pub fn get_local_identity_pub(db: &Database) -> Result<Vec<u8>> {
         .map_err(|e| KursalError::Identity(e.to_string()))?;
 
     Ok(identity_keypair.public_key().serialize().to_vec())
+}
+
+pub fn get_local_user_id(db: &Database) -> Result<UserId> {
+    let identity_pub_key = get_local_identity_pub(db)?;
+    let user_id: [u8; 32] = Sha256::digest(&identity_pub_key).into();
+
+    Ok(UserId(user_id))
 }
 
 pub fn get_dilithium_pub(db: &Database) -> Result<Vec<u8>> {

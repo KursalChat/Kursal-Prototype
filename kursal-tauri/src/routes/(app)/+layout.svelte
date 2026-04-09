@@ -113,7 +113,7 @@
                 {/if}
               </div>
               <div class="contact-status">
-                {#if contactsState.connectionStatus[contact.userId]}
+                {#if contactsState.connectionStatus[contact.userId] && contactsState.connectionStatus[contact.userId] !== 'disconnected'}
                   <StatusDot
                     status={contactsState.connectionStatus[contact.userId]}
                   />

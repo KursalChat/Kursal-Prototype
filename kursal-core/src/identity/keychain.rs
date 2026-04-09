@@ -33,6 +33,7 @@ pub fn store_master_secret(
     entry: &Option<Entry>,
     app_data_dir: &Path,
 ) -> Result<()> {
+    log::info!("keychain: Storing new master secret");
     if secret.len() != MASTER_SECRET_LEN {
         return Err(KursalError::Crypto(format!(
             "Master secret must be exactly {MASTER_SECRET_LEN} bytes"
@@ -52,6 +53,17 @@ pub fn store_master_secret(
             .as_ref()
             .ok_or_else(|| KursalError::Storage("Missing keychain entry".to_string()))?;
 
+        // Guard: refuse to overwrite an existing entry
+        match entry_ref.get_secret() {
+            Ok(_) => {
+                return Err(KursalError::Storage(
+                    "Refusing to overwrite existing master secret in keychain".to_string(),
+                ));
+            }
+            Err(keyring_core::Error::NoEntry) => {} // expected
+            Err(err) => return Err(KursalError::Storage(err.to_string())),
+        }
+
         entry_ref
             .set_secret(hex_secret.as_bytes())
             .map_err(|err| KursalError::Storage(err.to_string()))?;
@@ -65,6 +77,7 @@ pub fn load_master_secret(
     entry: &Option<Entry>,
     app_data_dir: &Path,
 ) -> Result<Option<Vec<u8>>> {
+    log::info!("keychain: Loading master secret");
     let raw_secret = if config.unsafe_write_key_to_file {
         log::warn!(
             "UNSAFE! Reading master secret to a file is DANGEROUS and should be used with care! Like for debugging purposes!"
@@ -84,17 +97,19 @@ pub fn load_master_secret(
     };
 
     if let Some(secret) = raw_secret {
-        if let Ok(decoded) = hex::decode(&secret) {
-            if decoded.len() == MASTER_SECRET_LEN {
-                return Ok(Some(decoded));
-            }
+        let decoded = hex::decode(&secret).map_err(|_| {
+            KursalError::Crypto("Stored master secret is not valid hex".to_string())
+        })?;
+
+        if decoded.len() != MASTER_SECRET_LEN {
+            return Err(KursalError::Crypto(format!(
+                "Stored master secret has wrong length: expected {} bytes, got {}",
+                MASTER_SECRET_LEN,
+                decoded.len()
+            )));
         }
 
-        return Err(KursalError::Crypto(format!(
-            "Stored master secret is corrupted. Expected {} bytes, found {}",
-            MASTER_SECRET_LEN * 2,
-            secret.len()
-        )));
+        return Ok(Some(decoded));
     }
 
     Ok(None)

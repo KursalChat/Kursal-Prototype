@@ -1,10 +1,7 @@
-use crate::{
-    dto::{ContactResponse, MessageResponse},
-    state::AppState,
-};
+use crate::dto::{ContactResponse, MessageResponse};
 use clap::Parser;
 use kursal_core::{
-    api::{AppEvent, ConnectionStatus, CoreCommand},
+    api::{AppEvent, ConnectionStatus, CoreCommand, state::AppState},
     identity::{
         self,
         keychain::{self, KeychainConfig},
@@ -20,7 +17,7 @@ pub mod commands;
 pub mod dirs;
 pub mod dto;
 pub mod error;
-pub mod state;
+pub mod file;
 
 #[derive(Parser, Default)]
 struct Args {
@@ -165,6 +162,25 @@ pub fn run() {
                 });
             }
 
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            {
+                use crate::file::open_files;
+
+                let files: Vec<(String, String)> = std::env::args()
+                    .skip(1)
+                    .filter(|a| !a.starts_with('-'))
+                    .filter_map(|path| {
+                        let p = std::path::PathBuf::from(&path);
+                        let name = p.file_name()?.to_string_lossy().to_string();
+                        Some((path, name))
+                    })
+                    .collect();
+
+                if !files.is_empty() {
+                    open_files(&app.handle(), files);
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -193,13 +209,34 @@ pub fn run() {
             commands::broadcast_profile,
             commands::share_profile,
             commands::check_for_updates,
+            commands::open_log_folder,
             //
             benchmark::run_otp_benchmark,
             benchmark::cancel_benchmark,
             benchmark::is_benchmark_running,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building application")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                use crate::file::open_files;
+
+                let files: Vec<(String, String)> = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .filter_map(|p| {
+                        let name = p.file_name()?.to_string_lossy().to_string();
+                        let path = p.to_string_lossy().to_string();
+                        Some((path, name))
+                    })
+                    .collect();
+
+                if !files.is_empty() {
+                    open_files(_app, files);
+                }
+            }
+        });
 }
 
 async fn handle_core_event(

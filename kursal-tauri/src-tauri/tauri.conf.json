@@ -16,9 +16,9 @@
         "width": 1024,
         "height": 768,
         "center": true,
-        "minWidth": 400,
-        "minHeight": 500,
-        "userAgent": "KursalClient/0.1.0",
+        "minWidth": 800,
+        "minHeight": 600,
+        "userAgent": "KursalChat/0.1.0",
         "zoomHotkeysEnabled": false
       }
     ],
@@ -46,14 +46,26 @@
     },
     "shortDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control.",
     "longDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control. No servers. No tracking. Just your private conversations.",
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "fileAssociations": [
+      {
+        "ext": ["kursal"],
+        "description": "Kursal data file",
+        "exportedType": {
+          "conformsTo": ["public.data"],
+          "identifier": "kursal"
+        },
+        "mimeType": "application/octet-stream",
+        "name": "Kursal",
+        "rank": "Owner",
+        "role": "Editor"
+      }
+    ]
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0MzA0M0E0NEY3ODNENQpSV1RWZy9kRU9nUkRCRTRhb3ErY0NqandDRFNTZ2p1azVFQjNpaUZBZkZ6RGpUY0MwRDZIdE1sSwo=",
-      "endpoints": [
-        "https://app.kursal.chat/latest.json"
-      ],
+      "endpoints": ["https://app.kursal.chat/latest.json"],
       "windows": {
         "installMode": "basicUi"
       },

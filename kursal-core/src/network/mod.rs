@@ -243,6 +243,14 @@ async fn handle_internal_network_event(
                     contact.peer_id = record.peer_id;
                     contact.known_addresses = record.relay_addresses;
                     contact.save(&*db.0.lock().await).ok();
+                    
+                    app_event_tx
+                        .send(AppEvent::ConnectionChange {
+                            contact_id: contact.user_id,
+                            status: ConnectionStatus::Disconnected,
+                        })
+                        .await
+                        .ok();
                 }
                 _ => {
                     app_event_tx

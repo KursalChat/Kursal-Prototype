@@ -112,12 +112,12 @@ impl SwarmHandle {
                 libp2p::noise::Config::new,
                 libp2p::yamux::Config::default,
             )
-            .map_err(|err| KursalError::Network(err.to_string()))?
+            .map_err(|err| KursalError::Network(format!("swarm tcp error: {err}")))?
             .with_quic()
             .with_dns()
-            .map_err(|err| KursalError::Network(err.to_string()))?
+            .map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)
-            .map_err(|err| KursalError::Network(err.to_string()))?
+            .map_err(|err| KursalError::Network(format!("swarm relay error: {err}")))?
             .with_behaviour(|key, relay_client|  -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
                 let local_peer_id = key.public().to_peer_id();
 
@@ -166,16 +166,16 @@ impl SwarmHandle {
                     request_response
                 })
             })
-            .map_err(|err| KursalError::Network(err.to_string()))?
+            .map_err(|err| KursalError::Network(format!("swarm behaviour error: {err}")))?
             .build();
 
         // TODO: maybe specify port?
         swarm
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-            .map_err(|err| KursalError::Network(err.to_string()))?;
+            .map_err(|err| KursalError::Network(format!("swarm listen error: {err}")))?;
         swarm
             .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-            .map_err(|err| KursalError::Network(err.to_string()))?;
+            .map_err(|err| KursalError::Network(format!("swarm listen error: {err}")))?;
 
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<SwarmCommand>(32);
         let peer_id = identity.peer_id;
@@ -381,7 +381,8 @@ async fn handle_swarm_event(
         SwarmEvent::ConnectionEstablished {
             peer_id, endpoint, ..
         } => {
-            let kind = if endpoint.is_relayed() {
+            let is_relayed_check = endpoint.is_relayed() || endpoint.get_remote_address().to_string().contains("p2p-circuit");
+            let kind = if is_relayed_check {
                 ConnectionKind::Relay
             } else {
                 ConnectionKind::Direct
