@@ -537,7 +537,7 @@ pub async fn handle_core_command(
             let result = LtcPayload::generate(db, &net)
                 .await
                 .and_then(|p| p.serialize())
-                .map(|res| KursalFile::LtcPayload(res))
+                .map(KursalFile::LtcPayload)
                 .and_then(|p| p.serialize());
 
             reply.send(result).ok();

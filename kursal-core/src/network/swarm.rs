@@ -2,7 +2,10 @@ use crate::{
     KursalError, Result,
     contacts::Contact,
     identity::TransportIdentity,
-    network::{BOOTSTRAP_PEERS, kademlia::{KAD_MAX_PAYLOAD, KursalKadStore}},
+    network::{
+        BOOTSTRAP_PEERS,
+        kademlia::{KAD_MAX_PAYLOAD, KursalKadStore},
+    },
 };
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
@@ -117,11 +120,15 @@ impl SwarmHandle {
 
         #[cfg(any(target_os = "android", target_os = "ios"))]
         // TODO: maybe chance cloudflare to another DNS
-        let swarm = swarm.with_dns_config(libp2p::dns::ResolverConfig::cloudflare(), libp2p::dns::ResolverOpts::default());
-        
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let swarm = swarm.with_dns().map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?;
+        let swarm = swarm.with_dns_config(
+            libp2p::dns::ResolverConfig::cloudflare(),
+            libp2p::dns::ResolverOpts::default(),
+        );
 
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let swarm = swarm
+            .with_dns()
+            .map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?;
 
         let mut swarm = swarm
             .with_relay_client(libp2p::noise::Config::new, libp2p::yamux::Config::default)
@@ -131,7 +138,7 @@ impl SwarmHandle {
 
                 let relay = relay_client;
                 let dcutr = libp2p::dcutr::Behaviour::new(local_peer_id);
-                
+
                 let mut kad_config = libp2p::kad::Config::new(StreamProtocol::new("/kursal/kad/1.0.0"));
                 kad_config.set_max_packet_size(KAD_MAX_PAYLOAD);
 
@@ -140,7 +147,6 @@ impl SwarmHandle {
                     KursalKadStore::new(local_peer_id),
                     kad_config,
                 );
-                
 
                 let mdns = libp2p::mdns::tokio::Behaviour::new(mdns::Config {
                     query_interval: Duration::from_secs(20),
@@ -389,7 +395,11 @@ async fn handle_swarm_event(
         SwarmEvent::ConnectionEstablished {
             peer_id, endpoint, ..
         } => {
-            let is_relayed_check = endpoint.is_relayed() || endpoint.get_remote_address().to_string().contains("p2p-circuit");
+            let is_relayed_check = endpoint.is_relayed()
+                || endpoint
+                    .get_remote_address()
+                    .to_string()
+                    .contains("p2p-circuit");
             let kind = if is_relayed_check {
                 ConnectionKind::Relay
             } else {

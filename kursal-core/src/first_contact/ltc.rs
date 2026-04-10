@@ -71,6 +71,13 @@ impl LtcPayload {
         db: SharedDatabase,
         network: &NetworkManager,
     ) -> Result<Contact> {
+        if self.peer_id == network.primary.peer_id.to_base58() {
+            log::debug!("[ltc] Cannot add yourself as a contact");
+            return Err(KursalError::Network(
+                "Cannot add yourself as a contact".to_string(),
+            ));
+        }
+
         let now = get_timestamp_secs()?;
 
         if self.expires_at < now {

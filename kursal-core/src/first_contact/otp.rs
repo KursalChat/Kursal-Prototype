@@ -154,6 +154,7 @@ pub async fn publish_otp(otp: &str, db: SharedDatabase, network: &NetworkManager
 }
 
 pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) -> Result<Contact> {
+    let local_peer_id = network.primary.peer_id.to_base58();
     let timestamp = get_timestamp_secs()?;
     let (enc_key, dht_key) = otp_to_keys(otp)?;
 
@@ -196,6 +197,11 @@ pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) 
                     continue;
                 }
             };
+
+            if record.peer_id == local_peer_id {
+                log::debug!("[otp] Cannot add yourself as a contact");
+                continue;
+            }
 
             if let Ok(bundle) = PreKeyBundleData::deserialize(&record.pre_key_bundle) {
                 // decoded. yay!

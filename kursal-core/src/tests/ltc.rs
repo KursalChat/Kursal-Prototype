@@ -5,10 +5,7 @@ use crate::{
         session_initiate,
     },
     first_contact::ltc::LtcPayload,
-    identity::generators::{
-        generate_dilithium_keypair, generate_identity_keypair, generate_kyber_prekey,
-        generate_pre_key, generate_signed_prekey,
-    },
+    identity::generators::{generate_dilithium_keypair, generate_identity_keypair},
     storage::{Database, SharedDatabase, get_dilithium_pub, get_timestamp_secs},
     tests::CACHE_DIR,
 };
@@ -20,15 +17,10 @@ async fn make_peer(name: &str) -> SharedDatabase {
     let _ = std::fs::remove_file(&path);
 
     let mut db = Database::open(&path, [0u8; 32]).unwrap();
-    let identity = generate_identity_keypair(&mut db).unwrap();
+    generate_identity_keypair(&mut db).unwrap();
     generate_dilithium_keypair(&mut db).unwrap();
 
     let sdb = SharedDatabase::from_db(db);
-    generate_signed_prekey(sdb.clone(), &identity)
-        .await
-        .unwrap();
-    generate_kyber_prekey(sdb.clone(), &identity).await.unwrap();
-    generate_pre_key(sdb.clone()).await.unwrap();
 
     sdb
 }

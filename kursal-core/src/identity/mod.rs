@@ -1,10 +1,7 @@
 use crate::{
     KursalError, Result,
     identity::{
-        generators::{
-            generate_dilithium_keypair, generate_identity_keypair, generate_kyber_prekey,
-            generate_pre_key, generate_signed_prekey,
-        },
+        generators::{generate_dilithium_keypair, generate_identity_keypair},
         keychain::{
             KeychainConfig, generate_master_secret, get_entry, load_master_secret,
             store_master_secret,
@@ -72,13 +69,10 @@ pub async fn init(
         return Ok(shared_db);
     }
 
-    let identity = generate_identity_keypair(&mut db)?;
+    generate_identity_keypair(&mut db)?;
     generate_dilithium_keypair(&mut db)?;
 
     let shared_db = SharedDatabase::from_db(db);
-    generate_signed_prekey(shared_db.clone(), &identity).await?;
-    generate_kyber_prekey(shared_db.clone(), &identity).await?;
-    generate_pre_key(shared_db.clone()).await?;
 
     Ok(shared_db)
 }

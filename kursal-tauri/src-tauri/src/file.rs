@@ -14,7 +14,7 @@ impl FileLoader for KursalFile {
 
         match self {
             KursalFile::LtcPayload(bytes) => {
-                let result = LtcPayload::deserialize(&bytes);
+                let result = LtcPayload::deserialize(bytes);
 
                 let _result = match result {
                     Ok(payload) => {

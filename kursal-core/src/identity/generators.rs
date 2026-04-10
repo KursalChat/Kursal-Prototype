@@ -11,10 +11,10 @@ use libsignal_protocol::{
 };
 use pqcrypto_dilithium::dilithium5;
 use pqcrypto_traits::sign::{PublicKey, SecretKey};
-use rand::{TryRngCore, rngs::OsRng};
+use rand::{RngCore, TryRngCore, rand_core::UnwrapErr, rngs::OsRng};
 use zeroize::Zeroizing;
 
-pub fn generate_identity_keypair(db: &mut Database) -> Result<IdentityKeyPair> {
+pub fn generate_identity_keypair(db: &mut Database) -> Result<()> {
     let mut rng = OsRng.unwrap_err();
     let idkey = IdentityKeyPair::generate(&mut rng);
 
@@ -24,37 +24,39 @@ pub fn generate_identity_keypair(db: &mut Database) -> Result<IdentityKeyPair> {
     let regid = rand::random::<u32>();
     db.raw_write(TABLE_SETTINGS, "registration_id", &regid.to_be_bytes())?;
 
-    Ok(idkey)
+    Ok(())
 }
 
-pub async fn generate_pre_key(mut db: SharedDatabase) -> Result<()> {
-    let mut rng = OsRng.unwrap_err();
-    let keypair = KeyPair::generate(&mut rng);
+pub async fn generate_prekey(
+    mut db: SharedDatabase,
+    rng: &mut UnwrapErr<OsRng>,
+) -> Result<(PreKeyId, PreKeyRecord)> {
+    let keypair = KeyPair::generate(rng);
 
-    let prekeyid = PreKeyId::from(1u32);
+    let prekeyid = PreKeyId::from(rng.next_u32());
     let record = PreKeyRecord::new(prekeyid, &keypair);
 
     db.save_pre_key(prekeyid, &record)
         .await
         .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
-    Ok(())
+    Ok((prekeyid, record))
 }
 
 pub async fn generate_signed_prekey(
     mut db: SharedDatabase,
     identity: &IdentityKeyPair,
-) -> Result<()> {
-    let mut rng = OsRng.unwrap_err();
-    let key_pair = KeyPair::generate(&mut rng);
+    rng: &mut UnwrapErr<OsRng>,
+) -> Result<(SignedPreKeyId, SignedPreKeyRecord)> {
+    let key_pair = KeyPair::generate(rng);
 
     let sig = identity
         .private_key()
-        .calculate_signature(&key_pair.public_key.serialize(), &mut rng)
+        .calculate_signature(&key_pair.public_key.serialize(), rng)
         .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
     let timestamp = get_timestamp_millis()?;
-    let signed_prekey_id = SignedPreKeyId::from(1u32);
+    let signed_prekey_id = SignedPreKeyId::from(rng.next_u32());
 
     let signed_prekey = SignedPreKeyRecord::new(
         signed_prekey_id,
@@ -67,35 +69,36 @@ pub async fn generate_signed_prekey(
         .await
         .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
-    Ok(())
+    Ok((signed_prekey_id, signed_prekey))
 }
 
 pub async fn generate_kyber_prekey(
     mut db: SharedDatabase,
     identity: &IdentityKeyPair,
-) -> Result<()> {
-    let mut rng = OsRng.unwrap_err();
-    let key_pair = kem::KeyPair::generate(kem::KeyType::Kyber1024, &mut rng);
+    rng: &mut UnwrapErr<OsRng>,
+) -> Result<(KyberPreKeyId, KyberPreKeyRecord)> {
+    let key_pair = kem::KeyPair::generate(kem::KeyType::Kyber1024, rng);
 
     let sig = identity
         .private_key()
-        .calculate_signature(&key_pair.public_key.serialize(), &mut rng)
+        .calculate_signature(&key_pair.public_key.serialize(), rng)
         .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
     let timestamp = get_timestamp_millis()?;
 
+    let kyber_prekey_id = KyberPreKeyId::from(rng.next_u32());
     let kyber_prekey = KyberPreKeyRecord::new(
-        1u32.into(), // TODO: maybe add this as parameter later
+        kyber_prekey_id,
         Timestamp::from_epoch_millis(timestamp),
         &key_pair,
         &sig,
     );
 
-    db.save_kyber_pre_key(KyberPreKeyId::from(1u32), &kyber_prekey)
+    db.save_kyber_pre_key(kyber_prekey_id, &kyber_prekey)
         .await
         .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
-    Ok(())
+    Ok((kyber_prekey_id, kyber_prekey))
 }
 
 pub fn generate_dilithium_keypair(db: &mut Database) -> Result<()> {

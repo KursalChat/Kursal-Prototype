@@ -236,14 +236,20 @@ async fn handle_internal_network_event(
 
             let net = network.lock().await;
 
+            log::info!("send to {peer_id} failed, trying lookup_rendezvous");
             match lookup_rendezvous(&contact.identity_pub_key, &contact.dilithium_pub_key, &net)
                 .await
             {
                 Ok(Some(record)) => {
+                    log::info!(
+                        "lookup_rendezvous discovered new addresses for peer {peer_id} -> {}",
+                        record.peer_id
+                    );
+
                     contact.peer_id = record.peer_id;
                     contact.known_addresses = record.relay_addresses;
                     contact.save(&*db.0.lock().await).ok();
-                    
+
                     app_event_tx
                         .send(AppEvent::ConnectionChange {
                             contact_id: contact.user_id,

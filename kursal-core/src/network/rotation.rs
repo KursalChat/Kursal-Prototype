@@ -227,6 +227,8 @@ impl NetworkManager {
             .await
             .map_err(|err| KursalError::Network(err.to_string()))?;
 
+        log::info!("published rendezvous record");
+
         Ok(())
     }
 

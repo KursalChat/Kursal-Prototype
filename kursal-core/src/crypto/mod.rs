@@ -3,11 +3,15 @@
 //! - Double Ratchet done via `message_encrypt` / `message_decrypt` with `&mut Database` as store.
 //! - `PreKeyBundle` + `process_prekey_bundle` for the standard prekey flow.
 
-use crate::{KursalError, Result, storage::SharedDatabase};
+use crate::{
+    KursalError, Result,
+    identity::generators::{generate_kyber_prekey, generate_prekey, generate_signed_prekey},
+    storage::SharedDatabase,
+};
 use libsignal_protocol::{
-    DeviceId, GenericSignedPreKey, IdentityKey, IdentityKeyStore, KyberPreKeyId, KyberPreKeyStore,
-    PreKeyBundle, PreKeyId, PreKeyStore, ProtocolAddress, PublicKey as SignalPublicKey,
-    SignedPreKeyId, SignedPreKeyStore, kem, process_prekey_bundle,
+    DeviceId, GenericSignedPreKey, IdentityKey, IdentityKeyStore, KyberPreKeyId, PreKeyBundle,
+    PreKeyId, ProtocolAddress, PublicKey as SignalPublicKey, SignedPreKeyId, kem,
+    process_prekey_bundle,
 };
 use rand::{TryRngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
@@ -100,42 +104,32 @@ impl PreKeyBundleData {
             .await
             .map_err(|err| KursalError::Storage(err.to_string()))?;
 
+        let mut rng = OsRng.unwrap_err();
+
         let (prekey_id, prekey) = {
             if with_prekey {
-                // TODO: this could just generate a new prekey instead
-                let prekey_id = PreKeyId::from(1u32);
+                let (prekey_id, prekey_record) = generate_prekey(db.clone(), &mut rng).await?;
 
-                (
-                    Some(prekey_id),
-                    Some(
-                        db.get_pre_key(prekey_id)
-                            .await
-                            .map_err(|err| KursalError::Storage(err.to_string()))?
-                            .public_key()
-                            .map_err(|err| KursalError::Storage(err.to_string()))?,
-                    ),
-                )
+                let prekey_public = prekey_record
+                    .public_key()
+                    .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+                (Some(prekey_id), Some(prekey_public))
             } else {
                 (None, None)
             }
         };
-
-        let signed_prekey_id = SignedPreKeyId::from(1u32);
-        let signed_prekey = db
-            .get_signed_pre_key(signed_prekey_id)
-            .await
-            .map_err(|err| KursalError::Storage(err.to_string()))?;
 
         let identity_keypair = db
             .get_identity_key_pair()
             .await
             .map_err(|err| KursalError::Storage(err.to_string()))?;
 
-        let kyber_prekey_id = KyberPreKeyId::from(1u32);
-        let kyber_prekey = db
-            .get_kyber_pre_key(kyber_prekey_id)
-            .await
-            .map_err(|err| KursalError::Storage(err.to_string()))?;
+        let (signed_prekey_id, signed_prekey) =
+            generate_signed_prekey(db.clone(), &identity_keypair, &mut rng).await?;
+
+        let (kyber_prekey_id, kyber_prekey) =
+            generate_kyber_prekey(db.clone(), &identity_keypair, &mut rng).await?;
 
         Ok(PreKeyBundleData {
             registration_id,

@@ -158,7 +158,14 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = check_for_updates_impl(handle, false).await;
+                    use std::time::Duration;
+
+                    let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
+
+                    loop {
+                        interval.tick().await;
+                        let _ = check_for_updates_impl(handle.clone(), false).await;
+                    }
                 });
             }
 
@@ -404,6 +411,7 @@ pub(crate) async fn check_for_updates_impl(
     app: AppHandle,
     manual: bool,
 ) -> tauri_plugin_updater::Result<()> {
+    log::debug!("checking for updates... manual={manual}");
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
     use tauri_plugin_updater::UpdaterExt;
 
@@ -437,10 +445,10 @@ pub(crate) async fn check_for_updates_impl(
             .download_and_install(
                 |chunk_len, content_len| {
                     downloaded += chunk_len;
-                    log::info!("[updater] downloaded {downloaded} from {content_len:?}");
+                    log::debug!("[updater] downloaded {downloaded} out of {content_len:?}");
                 },
                 || {
-                    log::info!("[updater] download finished");
+                    log::debug!("[updater] download finished");
                 },
             )
             .await?;

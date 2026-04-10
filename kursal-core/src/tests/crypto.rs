@@ -6,10 +6,7 @@ use crate::{
         session_initiate,
         stream::{derive_stream_key, stream_decrypt, stream_encrypt},
     },
-    identity::generators::{
-        generate_dilithium_keypair, generate_identity_keypair, generate_kyber_prekey,
-        generate_pre_key, generate_signed_prekey,
-    },
+    identity::generators::{generate_dilithium_keypair, generate_identity_keypair},
     storage::{Database, SharedDatabase},
     tests::CACHE_DIR,
 };
@@ -29,15 +26,10 @@ async fn make_peer(name: &str) -> SharedDatabase {
     let db_key = [0u8; 32]; // fixed key is fine for tests
     let mut db = Database::open(&path, db_key).unwrap();
 
-    let identity = generate_identity_keypair(&mut db).unwrap();
+    generate_identity_keypair(&mut db).unwrap();
     generate_dilithium_keypair(&mut db).unwrap();
 
     let sdb = SharedDatabase::from_db(db);
-    generate_signed_prekey(sdb.clone(), &identity)
-        .await
-        .unwrap();
-    generate_kyber_prekey(sdb.clone(), &identity).await.unwrap();
-    generate_pre_key(sdb.clone()).await.unwrap();
 
     sdb
 }

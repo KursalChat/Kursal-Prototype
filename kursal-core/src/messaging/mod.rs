@@ -64,10 +64,7 @@ impl StoredMessage {
         let contact_id = hex::encode(contact_id.0);
         let message_id = hex::encode(id.0);
 
-        db.raw_delete(
-            TABLE_MESSAGES,
-            &format!("{contact_id}:{message_id}"),
-        )?;
+        db.raw_delete(TABLE_MESSAGES, &format!("{contact_id}:{message_id}"))?;
 
         Ok(())
     }
