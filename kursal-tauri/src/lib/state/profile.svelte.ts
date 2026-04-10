@@ -1,10 +1,11 @@
-import { getLocalUserProfile, getLocalPeerId } from '$lib/api/identity';
+import { getLocalUserProfile, getLocalPeerId, getLocalUserId } from '$lib/api/identity';
 
 function createProfileState() {
   let displayName = $state("You");
   let avatarBase64 = $state<string | null>(null);
   let avatarBytes = $state<number[] | null>(null);
   let peerId = $state<string | null>(null);
+  let userId = $state<string | null>(null);
   let loading = $state(false);
   let initialized = $state(false);
 
@@ -32,8 +33,9 @@ function createProfileState() {
     
     try {
       peerId = await getLocalPeerId();
+      userId = await getLocalUserId();
     } catch (e) {
-      console.error("Failed to load peer id:", e);
+      console.error("Failed to load peer/user id:", e);
     }
     
     initialized = true;
@@ -59,6 +61,7 @@ function createProfileState() {
     get avatarBase64() { return avatarBase64; },
     get avatarBytes() { return avatarBytes; },
     get peerId() { return peerId; },
+    get userId() { return userId; },
     get loading() { return loading; },
     load,
     update,

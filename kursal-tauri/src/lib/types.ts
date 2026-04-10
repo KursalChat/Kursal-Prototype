@@ -1,5 +1,5 @@
 export interface ContactResponse {
-  userId: string;          // hex of UserId bytes
+  userId: string; // hex of UserId bytes
   displayName: string;
   peerId: string;
   knownAddresses: string[];
@@ -7,18 +7,20 @@ export interface ContactResponse {
   profileShared: boolean;
   blocked: boolean;
   createdAt: number;
-  avatarBase64?: string | null;  // base64 encoded webp string
+  avatarBase64?: string | null; // base64 encoded webp string
   avatarBytes?: number[] | null; // Raw byte array from Rust
 }
 
 export interface MessageResponse {
-  id: string;              // hex of MessageId bytes
-  contactId: string;       // hex of UserId bytes
-  direction: 'sent' | 'received';
+  id: string; // hex of MessageId bytes
+  contactId: string; // hex of UserId bytes
+  direction: "sent" | "received";
   content: string;
-  status: 'sending' | 'delivered' | 'failed';
+  status: "sending" | "delivered" | "failed";
   timestamp: number;
-  replyTo: string | null;  // hex of MessageId bytes
+  replyTo: string | null; // hex of MessageId bytes
+  reactions?: { emoji: string; userId: string }[];
+  edited?: boolean;
 }
 
 export interface OtpResponse {
@@ -35,7 +37,7 @@ export type MessageReceivedPayload = MessageResponse;
 
 export interface ConnectionChangedPayload {
   contactId: string;
-  status: 'connecting' | 'relay' | 'holepunch' | 'direct' | 'disconnected';
+  status: "connecting" | "relay" | "holepunch" | "direct" | "disconnected";
 }
 
 export interface NearbyRequestPayload {
@@ -58,5 +60,5 @@ export interface ReactionChangedPayload {
   contactId: string;
   messageId: string;
   emoji: string;
+  userId?: string;
 }
-

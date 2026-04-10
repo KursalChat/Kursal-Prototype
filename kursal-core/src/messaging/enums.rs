@@ -27,7 +27,7 @@ impl MessageId {
 #[derive(Serialize, Deserialize)]
 pub enum KursalMessage {
     Text(TextMessage),
-    Reaction(Reaction),
+    ReactionAdd(ReactionAdd),
     ReactionRemove(ReactionRemove),
     MessageEdit(MessageEdit),
     MessageDelete(MessageDelete),
@@ -50,11 +50,11 @@ impl KursalMessage {
     pub fn message_id(&self) -> Option<MessageId> {
         match self {
             KursalMessage::Text(m) => Some(m.id),
-            KursalMessage::Reaction(r) => Some(r.id),
             KursalMessage::FileOffer(m) => Some(m.id),
             KursalMessage::FileChunk(m) => Some(m.transfer_id),
             KursalMessage::CallSignal(m) => Some(m.call_id),
             KursalMessage::DeliveryReceipt(m) => Some(m.message_id),
+            KursalMessage::ReactionAdd(_) => None,
             KursalMessage::ReactionRemove(_) => None,
             KursalMessage::MessageEdit(_) => None,
             KursalMessage::MessageDelete(_) => None,
@@ -72,8 +72,7 @@ pub struct TextMessage {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Reaction {
-    pub id: MessageId,
+pub struct ReactionAdd {
     pub target_id: MessageId,
     pub emoji: String,
     pub timestamp: u64,

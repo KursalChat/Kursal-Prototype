@@ -7,7 +7,7 @@ function createMessagesState() {
   // keyed by contactId
   let unreadByContact = $state<Record<string, number>>({});
   // keyed by `${contactId}:${messageId}`
-  let reactions = $state<Record<string, string[]>>({});
+  let reactions = $state<Record<string, Array<{ emoji: string, userIds: string[] }>>>({});
   let loadedContacts = $state<Set<string>>(new Set());
 
   function reactionKey(contactId: string, messageId: string) {
@@ -20,6 +20,18 @@ function createMessagesState() {
       const msgs = await getMessages(contactId);
       const now = Date.now();
       msgs.forEach((m) => {
+        if (m.reactions && m.reactions.length > 0) {
+          const key = reactionKey(m.contactId, m.id);
+          const grouped: Record<string, { emoji: string, userIds: string[] }> = {};
+          m.reactions.forEach(r => {
+            if (!grouped[r.emoji]) grouped[r.emoji] = { emoji: r.emoji, userIds: [] };
+            if (!grouped[r.emoji].userIds.includes(r.userId)) {
+              grouped[r.emoji].userIds.push(r.userId);
+            }
+          });
+          reactions[key] = Object.values(grouped);
+        }
+
         if (m.status === "sending" && now - m.timestamp > 15000) {
           m.status = "failed";
         } else if (m.status === "sending") {
@@ -31,7 +43,8 @@ function createMessagesState() {
           );
         }
       });
-      map[contactId] = msgs;
+      // Filter out deleted messages
+      map[contactId] = msgs.filter(m => m.content !== "");
     } catch (e) {
       console.error("Failed to load messages for", contactId, e);
     }
@@ -43,6 +56,7 @@ function createMessagesState() {
   }
 
   function append(msg: MessageResponse) {
+    if (msg.content === "") return;
     if (!map[msg.contactId]) map[msg.contactId] = [];
     const list = map[msg.contactId];
     // Don't add duplicate if already exists
@@ -103,12 +117,15 @@ function createMessagesState() {
     const msg = list.find((m) => m.id === messageId);
     if (msg) {
       msg.content = content;
+      msg.edited = true;
       map[contactId] = [...list];
     }
   }
 
   function markDeleted(messageId: string, contactId: string) {
-    updateContent(messageId, contactId, "[message deleted]");
+    const list = map[contactId];
+    if (!list) return;
+    map[contactId] = list.filter((m) => m.id !== messageId);
   }
 
   function removeLocally(messageId: string, contactId: string) {
@@ -130,21 +147,37 @@ function createMessagesState() {
     unreadByContact[contactId] = 0;
   }
 
-  function addReaction(messageId: string, contactId: string, emoji: string) {
+  function addReaction(messageId: string, contactId: string, emoji: string, userId: string) {
     const key = reactionKey(contactId, messageId);
     const current = reactions[key] ?? [];
-    if (!current.includes(emoji)) {
-      reactions[key] = [...current, emoji];
+    const index = current.findIndex(r => r.emoji === emoji);
+    if (index >= 0) {
+      if (!current[index].userIds.includes(userId)) {
+        current[index].userIds.push(userId);
+      }
+    } else {
+      current.push({ emoji, userIds: [userId] });
+    }
+    reactions[key] = [...current];
+  }
+
+  function removeReaction(messageId: string, contactId: string, emoji: string, userId: string) {
+    const key = reactionKey(contactId, messageId);
+    let current = reactions[key] ?? [];
+    const index = current.findIndex(r => r.emoji === emoji);
+    if (index >= 0) {
+      current[index].userIds = current[index].userIds.filter(u => u !== userId);
+      
+      if (current[index].userIds.length === 0) {
+        current = current.filter(r => r.emoji !== emoji);
+      } else {
+        current = [...current];
+      }
+      reactions[key] = current;
     }
   }
 
-  function removeReaction(messageId: string, contactId: string, emoji: string) {
-    const key = reactionKey(contactId, messageId);
-    const current = reactions[key] ?? [];
-    reactions[key] = current.filter((value) => value !== emoji);
-  }
-
-  function reactionsFor(messageId: string, contactId: string): string[] {
+  function reactionsFor(messageId: string, contactId: string): Array<{ emoji: string, userIds: string[] }> {
     return reactions[reactionKey(contactId, messageId)] ?? [];
   }
 

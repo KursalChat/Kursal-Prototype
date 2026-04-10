@@ -487,10 +487,10 @@ async fn handle_swarm_event(
         }
 
         SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
-            log::warn!("[swarm] outgoing connection error peer={peer_id:?} error={error}");
+            log::info!("[swarm] outgoing connection error peer={peer_id:?} error={error}");
         }
         SwarmEvent::IncomingConnectionError { error, .. } => {
-            log::warn!("[swarm] incoming connection error: {error}");
+            log::info!("[swarm] incoming connection error: {error}");
         }
 
         _ => {}

@@ -6,7 +6,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
-  import { sendText, deleteLocalMessage } from "$lib/api/messages";
+  import { sendText, deleteLocalMessage, deleteMessage, editMessage, addReaction, removeReaction } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
@@ -14,7 +14,7 @@
   import DOMPurify from "dompurify";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { confirm } from "@tauri-apps/plugin-dialog";
-  import { ShieldAlert, Send, Reply, Copy, ArrowLeft, X } from "lucide-svelte";
+  import { ShieldAlert, Send, Reply, Copy, ArrowLeft, X, Edit2, Trash2, Smile } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
   import Spinner from "$lib/components/Spinner.svelte";
@@ -33,6 +33,8 @@
   let showProfile = $state(false);
   let hoveredMessageId = $state<string | null>(null);
   let replyingToMessageId = $state<string | null>(null);
+  let editingMessageId = $state<string | null>(null);
+  let showsReactionPicker = $state<string | null>(null);
   let isCoarsePointer = $state(false);
   let listEl = $state<HTMLElement | null>(null);
   let composerEl = $state<HTMLTextAreaElement | null>(null);
@@ -123,17 +125,33 @@
     if (contactId) messagesState.markRead(contactId);
   }
 
-  function renderMarkdown(content: string): string {
-    const cached = markdownCache.get(content);
+  function renderMarkdown(content: string, isEdited: boolean = false): string {
+    const cacheKey = content + (isEdited ? '|edited' : '|not');
+    const cached = markdownCache.get(cacheKey);
     if (cached) return cached;
 
-    const html = marked.parse(content, {
+    let html = marked.parse(content, {
       async: false,
       gfm: true,
       breaks: true,
+    }) as string;
+    
+    if (isEdited) {
+      const editedSpan = ' <span class="edited-badge" style="font-size: 0.85em; opacity: 0.6; margin-left: 6px;">(edited)</span>';
+      if (html.endsWith('</p>\n')) {
+        html = html.replace(/<\/p>\n$/, `${editedSpan}</p>\n`);
+      } else if (html.endsWith('</p>')) {
+        html = html.replace(/<\/p>$/, `${editedSpan}</p>`);
+      } else {
+        html += editedSpan;
+      }
+    }
+
+    const sanitized = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'em', 'strong', 'a', 'pre', 'code', 'blockquote', 'ul', 'ol', 'li', 'del', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'],
+      ALLOWED_ATTR: ['href', 'class', 'target', 'rel', 'style'] // Allow span and style
     });
-    const sanitized = DOMPurify.sanitize(html as string);
-    markdownCache.set(content, sanitized);
+    markdownCache.set(cacheKey, sanitized);
     if (markdownCache.size > 600) {
       const firstKey = markdownCache.keys().next().value;
       if (firstKey) markdownCache.delete(firstKey);
@@ -213,11 +231,52 @@
 
   function startReply(message: MessageResponse) {
     replyingToMessageId = message.id;
+    editingMessageId = null;
     tick().then(() => composerEl?.focus());
+  }
+
+  function startEdit(message: MessageResponse) {
+    editingMessageId = message.id;
+    replyingToMessageId = null;
+    inputText = message.content;
+    tick().then(() => composerEl?.focus());
+  }
+
+  function cancelEdit() {
+    editingMessageId = null;
+    inputText = "";
   }
 
   function cancelReply() {
     replyingToMessageId = null;
+  }
+
+  async function handleDelete(message: MessageResponse) {
+    if (await confirm("Are you sure you want to delete this message for everyone?")) {
+      try {
+        await deleteMessage(contactId, message.id);
+        messagesState.markDeleted(message.id, contactId);
+      } catch (e) {
+        console.error("Failed to delete message", e);
+        notifications.push("Failed to delete message", "error");
+      }
+    }
+  }
+
+  async function toggleReaction(message: MessageResponse, emoji: string) {
+    try {
+      const reactions = messagesState.reactionsFor(message.id, contactId);
+      const isReactedByMe = reactions.find(r => r.emoji === emoji)?.userIds.includes(profileState.userId || "");
+      if (isReactedByMe) {
+        await removeReaction(contactId, message.id, emoji);
+        messagesState.removeReaction(message.id, contactId, emoji, profileState.userId || "");
+      } else {
+        await addReaction(contactId, message.id, emoji);
+        messagesState.addReaction(message.id, contactId, emoji, profileState.userId || "");
+      }
+    } catch (e) {
+      console.error("React failed", e);
+    }
   }
 
   async function copyMessageText(message: MessageResponse) {
@@ -299,6 +358,23 @@
     const text = inputText.trim();
     if (!text) return;
 
+    if (editingMessageId) {
+      if (!contactId) return;
+      sending = true;
+      try {
+        await editMessage(contactId, editingMessageId, text);
+        messagesState.updateContent(editingMessageId, contactId, text);
+        inputText = "";
+        editingMessageId = null;
+      } catch (e) {
+        notifications.push("Failed to edit message", "error");
+        console.error("Edit failed:", e);
+      } finally {
+        sending = false;
+      }
+      return;
+    }
+
     const replyTo = replyingToMessageId;
     inputText = "";
     sending = true;
@@ -360,10 +436,17 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && replyingToMessageId) {
-      e.preventDefault();
-      cancelReply();
-      return;
+    if (e.key === "Escape") {
+      if (replyingToMessageId) {
+        e.preventDefault();
+        cancelReply();
+        return;
+      }
+      if (editingMessageId) {
+        e.preventDefault();
+        cancelEdit();
+        return;
+      }
     }
 
     if (e.key === "Enter" && !e.shiftKey) {
@@ -474,13 +557,21 @@
               {/if}
 
               <div class="selectable markdown-content">
-                {@html renderMarkdown(msg.content)}
+                <div class="message-content-inner">
+                  {@html renderMarkdown(msg.content, msg.edited)}
+                </div>
               </div>
 
               {#if messagesState.reactionsFor(msg.id, msg.contactId).length > 0}
                 <div class="message-reactions">
-                  {#each messagesState.reactionsFor(msg.id, msg.contactId) as emoji}
-                    <span class="reaction-chip">{emoji}</span>
+                  {#each messagesState.reactionsFor(msg.id, msg.contactId) as reaction}
+                    <button 
+                      class="reaction-chip" 
+                      class:by-me={reaction.userIds.includes(profileState.userId || "")} 
+                      onclick={() => toggleReaction(msg, reaction.emoji)}
+                    >
+                      {reaction.emoji} {#if reaction.userIds.length > 1}<span class="reaction-count">{reaction.userIds.length}</span>{/if}
+                    </button>
                   {/each}
                 </div>
               {/if}
@@ -528,19 +619,58 @@
               </div>
             </div>
 
-            {#if hoveredMessageId === msg.id || isCoarsePointer}
+            {#if hoveredMessageId === msg.id || isCoarsePointer || showsReactionPicker === msg.id}
               <div class="message-actions">
+                <div class="reaction-wrapper">
+                  {#if showsReactionPicker === msg.id}
+                    <div class="reaction-picker">
+                      {#each ["👍", "❤️", "😂", "😲", "😢", "😡"] as emoji}
+                        <button
+                          class="reaction-emoji-btn"
+                          onclick={() => {
+                            toggleReaction(msg, emoji);
+                            showsReactionPicker = null;
+                          }}
+                        >{emoji}</button>
+                      {/each}
+                    </div>
+                  {/if}
+                  <button
+                    class="action-btn"
+                    title="Add reaction"
+                    type="button"
+                    onclick={() => showsReactionPicker = showsReactionPicker === msg.id ? null : msg.id}><Smile size={14} /></button
+                  >
+                </div>
                 <button
                   class="action-btn"
+                  title="Reply"
                   type="button"
                   onclick={() => startReply(msg)}><Reply size={14} /></button
                 >
                 <button
                   class="action-btn"
+                  title="Copy"
                   type="button"
                   onclick={() => copyMessageText(msg)}
                   ><Copy size={14} /></button
                 >
+                {#if msg.direction === "sent"}
+                  <button
+                    class="action-btn"
+                    title="Edit"
+                    type="button"
+                    onclick={() => startEdit(msg)}
+                    ><Edit2 size={14} /></button
+                  >
+                  <button
+                    class="action-btn"
+                    title="Delete"
+                    type="button"
+                    onclick={() => handleDelete(msg)}
+                    ><Trash2 size={14} /></button
+                  >
+                {/if}
               </div>
             {/if}
           </div>
@@ -569,6 +699,14 @@
             <div class="replying-label">Replying to message</div>
             <div class="replying-preview">{replyingToPreview}</div>
             <button class="reply-cancel" type="button" onclick={cancelReply}
+              >Cancel</button
+            >
+          </div>
+        {:else if editingMessageId}
+          <div class="replying-banner">
+            <div class="replying-label">Editing message</div>
+            <div class="replying-preview"></div>
+            <button class="reply-cancel" type="button" onclick={cancelEdit}
               >Cancel</button
             >
           </div>
@@ -752,7 +890,7 @@
     padding: 18px 18px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 6px;
   }
 
   .no-messages {
@@ -767,13 +905,14 @@
   }
 
   .message-row {
+    position: relative;
     display: flex;
     gap: 8px;
     align-items: flex-end;
     align-self: flex-start;
     max-width: 100%;
-    content-visibility: auto;
-    contain-intrinsic-size: 72px;
+    margin-top: 2px;
+    /* Removed content-visibility and contain-intrinsic-size because they cause clipping for absolute children */
   }
 
   .message-row.sent {
@@ -909,9 +1048,33 @@
     border: 1px solid rgba(148, 163, 184, 0.3);
     background: rgba(15, 23, 42, 0.5);
     border-radius: 999px;
-    padding: 2px 8px;
+    padding: 3px 8px;
     font-size: 13px;
     line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    user-select: none;
+    color: inherit;
+    outline: none;
+  }
+
+  .reaction-chip:hover {
+    background: rgba(30, 41, 59, 0.7);
+  }
+
+  .reaction-chip.by-me {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+
+  .reaction-chip.by-me:hover {
+    background: rgba(59, 130, 246, 0.35);
+  }
+
+  .reaction-count {
+    margin-left: 2px;
+    font-size: 11px;
+    opacity: 0.8;
   }
 
   .status {
@@ -951,26 +1114,95 @@
   }
 
   .message-actions {
+    position: absolute;
+    top: -18px;
+    z-index: 100;
     display: flex;
     gap: 6px;
-    margin-bottom: 4px;
+    background: rgba(15, 23, 42, 0.85);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(8px);
+  }
+
+  .message-row:not(.sent) .message-actions {
+    left: 10px;
+  }
+
+  .message-row.sent .message-actions {
+    right: 10px;
   }
 
   .action-btn {
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    background: rgba(15, 23, 42, 0.82);
+    border: none;
+    background: transparent;
     color: rgba(226, 232, 240, 0.92);
-    border-radius: 999px;
+    border-radius: 4px;
     font-size: 12px;
-    font-weight: 600;
-    padding: 4px 10px;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     transition: all var(--transition);
   }
 
   .action-btn:hover {
-    background: rgba(67, 56, 202, 0.38);
-    border-color: rgba(129, 140, 248, 0.5);
+    background: rgba(148, 163, 184, 0.2);
+  }
+
+  .reaction-wrapper {
+    position: relative;
+    display: flex;
+  }
+
+  .reaction-picker {
+    position: absolute;
+    bottom: 100%;
+    margin-bottom: 6px;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    display: flex;
+    padding: 6px;
+    gap: 4px;
+    z-index: 110;
+  }
+
+  .message-row.sent .reaction-picker {
+    right: -10px;
+  }
+
+  .message-row:not(.sent) .reaction-picker {
+    left: -10px;
+  }
+
+  .message-content-inner {
+    display: inline;
+  }
+
+  .message-content-inner :global(p:last-child) {
+    display: inline;
+    margin-bottom: 0;
+  }
+
+  .reaction-emoji-btn {
+    background: transparent;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: transform 0.15s ease-out, background 0.15s;
+  }
+
+  .reaction-emoji-btn:hover {
+    transform: scale(1.2);
+    background: rgba(255, 255, 255, 0.1);
   }
 
   .input-area {

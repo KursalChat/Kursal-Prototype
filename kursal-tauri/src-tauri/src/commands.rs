@@ -10,7 +10,8 @@ use kursal_core::identity::{UserId, security_code};
 use kursal_core::messaging::StoredMessage;
 use kursal_core::messaging::enums::MessageId;
 use kursal_core::storage::{
-    get_dilithium_pub, get_local_identity_pub, get_local_profile, set_local_profile,
+    get_dilithium_pub, get_local_identity_pub, get_local_profile, get_local_user_id,
+    set_local_profile,
 };
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::oneshot;
@@ -407,6 +408,13 @@ pub async fn set_relay_server_enabled(
 }
 
 #[tauri::command]
+pub async fn get_local_user_id_hex(state: tauri::State<'_, AppState>) -> Result<String> {
+    let db = state.db.0.lock().await;
+    let uid = get_local_user_id(&db)?;
+    Ok(hex::encode(uid.0))
+}
+
+#[tauri::command]
 pub async fn get_local_user_profile(
     state: tauri::State<'_, AppState>,
 ) -> Result<(String, Option<Vec<u8>>)> {
@@ -460,6 +468,112 @@ pub async fn share_profile(
             avatar_bytes,
             contact_id,
             display_name,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_message_for_everyone(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    message_id: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::DeleteMessage {
+            contact_id,
+            message_id,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn edit_message(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    message_id: String,
+    new_content: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::EditMessage {
+            contact_id,
+            message_id,
+            new_content,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn add_reaction(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    message_id: String,
+    emoji: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::ReactionAdd {
+            contact_id,
+            message_id,
+            emoji,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_reaction(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    message_id: String,
+    emoji: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::ReactionRemove {
+            contact_id,
+            message_id,
+            emoji,
             reply: reply_tx,
         })
         .await

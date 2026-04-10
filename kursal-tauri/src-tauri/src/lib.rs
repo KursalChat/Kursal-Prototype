@@ -212,12 +212,17 @@ pub fn run() {
             commands::set_contact_blocked,
             commands::rotate_peer_id,
             commands::get_local_peer_id,
+            commands::get_local_user_id_hex,
             commands::set_relay_server_enabled,
             commands::get_local_user_profile,
             commands::broadcast_profile,
             commands::share_profile,
             commands::check_for_updates,
             commands::open_log_folder,
+            commands::delete_message_for_everyone,
+            commands::edit_message,
+            commands::add_reaction,
+            commands::remove_reaction,
             //
             benchmark::run_otp_benchmark,
             benchmark::cancel_benchmark,
@@ -406,7 +411,15 @@ async fn handle_core_event(
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(all(not(any(target_os = "android", target_os = "ios")), dev))]
+pub(crate) async fn check_for_updates_impl(
+    _app: AppHandle,
+    _manual: bool,
+) -> tauri_plugin_updater::Result<()> {
+    return Ok(()); // do not try to update on dev mode
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios", dev)))]
 pub(crate) async fn check_for_updates_impl(
     app: AppHandle,
     manual: bool,

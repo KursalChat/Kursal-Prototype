@@ -6,6 +6,9 @@ export const rotatePeerId = (): Promise<void> =>
 export const getLocalPeerId = (): Promise<string> =>
   invoke('get_local_peer_id');
 
+export const getLocalUserId = (): Promise<string> =>
+  invoke('get_local_user_id_hex');
+
 export const getLocalUserProfile = (): Promise<[string, number[] | null]> =>
   invoke('get_local_user_profile');
 

@@ -7,6 +7,18 @@ export const sendText = (contactId: string, text: string, replyTo: string | null
 export const deleteLocalMessage = (contactId: string, messageId: string): Promise<void> =>
   invoke('delete_local_message', { contactId, messageId });
 
+export const deleteMessage = (contactId: string, messageId: string): Promise<void> =>
+  invoke('delete_message_for_everyone', { contactId, messageId });
+
+export const editMessage = (contactId: string, messageId: string, newContent: string): Promise<void> =>
+  invoke('edit_message', { contactId, messageId, newContent });
+
+export const addReaction = (contactId: string, messageId: string, emoji: string): Promise<void> =>
+  invoke('add_reaction', { contactId, messageId, emoji });
+
+export const removeReaction = (contactId: string, messageId: string, emoji: string): Promise<void> =>
+  invoke('remove_reaction', { contactId, messageId, emoji });
+
 export const getMessages = async (
   contactId: string,
   limit = 100,

@@ -131,6 +131,7 @@
           event.payload.messageId,
           event.payload.contactId,
           event.payload.emoji,
+          event.payload.contactId
         );
       }),
     );
@@ -142,6 +143,7 @@
           event.payload.messageId,
           event.payload.contactId,
           event.payload.emoji,
+          event.payload.contactId
         );
       }),
     );

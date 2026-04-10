@@ -384,7 +384,6 @@
     font-weight: 700;
     font-size: 12px;
     letter-spacing: 0.06em;
-    text-transform: uppercase;
   }
 
   .toggle-pill.active {

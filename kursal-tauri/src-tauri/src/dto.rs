@@ -34,6 +34,12 @@ impl From<Contact> for ContactResponse {
         }
     }
 }
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionResponse {
+    pub emoji: String,
+    pub user_id: String,
+}
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -45,6 +51,8 @@ pub struct MessageResponse {
     pub status: String,
     pub timestamp: u64,
     pub reply_to: Option<String>,
+    pub edited: bool,
+    pub reactions: Vec<ReactionResponse>,
 }
 
 impl From<StoredMessage> for MessageResponse {
@@ -53,6 +61,15 @@ impl From<StoredMessage> for MessageResponse {
             KursalMessage::Text(t) => t.reply_to.map(|id| hex::encode(id.0)),
             _ => None,
         };
+
+        let db_reactions: Vec<ReactionResponse> = value
+            .reactions
+            .into_iter()
+            .map(|r| ReactionResponse {
+                emoji: r.emoji,
+                user_id: hex::encode(r.user_id.0),
+            })
+            .collect();
 
         Self {
             id: hex::encode(value.id.0),
@@ -63,10 +80,10 @@ impl From<StoredMessage> for MessageResponse {
             },
             content: match &value.payload {
                 KursalMessage::Text(t) => t.content.clone(),
-                KursalMessage::Reaction(r) => format!("Reacted {} to a message", r.emoji),
+                KursalMessage::ReactionAdd(r) => format!("Reacted {} to a message", r.emoji),
                 KursalMessage::ReactionRemove(r) => format!("Removed reaction {}", r.emoji),
                 KursalMessage::MessageEdit(e) => format!("Edited {}", e.new_content),
-                KursalMessage::MessageDelete(_) => "[message deleted]".to_string(),
+                KursalMessage::MessageDelete(_) => String::new(),
                 KursalMessage::FileOffer(f) => format!("File: {}", f.filename),
                 KursalMessage::FileChunk(_) => "[file chunk]".to_string(),
                 KursalMessage::CallSignal(_) => "[call]".to_string(),
@@ -80,6 +97,8 @@ impl From<StoredMessage> for MessageResponse {
             },
             timestamp: value.timestamp,
             reply_to,
+            edited: value.edited,
+            reactions: db_reactions,
         }
     }
 }

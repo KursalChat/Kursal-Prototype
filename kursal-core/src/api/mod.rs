@@ -15,8 +15,8 @@ use crate::{
     messaging::{
         StoredMessage, StoredReaction,
         enums::{
-            DeliveryReceipt, Direction, KursalMessage, MessageId, MessageStatus, ProfileInfo,
-            TextMessage,
+            DeliveryReceipt, Direction, KursalMessage, MessageDelete, MessageEdit, MessageId,
+            MessageStatus, ProfileInfo, ReactionAdd, ReactionRemove, TextMessage,
         },
     },
     network::{
@@ -24,7 +24,9 @@ use crate::{
         rendezvous::publish_rendezvous,
         swarm::{SwarmCommand, str_to_multiaddr},
     },
-    storage::{SharedDatabase, TABLE_SETTINGS, file::KursalFile, get_timestamp_secs},
+    storage::{
+        SharedDatabase, TABLE_SETTINGS, file::KursalFile, get_local_user_id, get_timestamp_secs,
+    },
 };
 use libp2p::PeerId;
 use libsignal_protocol::{DeviceId, ProtocolAddress};
@@ -105,6 +107,7 @@ pub async fn send_message(
     let serialized = content.serialize()?;
     let address = ProtocolAddress::new(hex::encode(contact.user_id.0), DeviceId::new(1u8).unwrap());
 
+    let now = get_timestamp_secs()?;
     let message = message_send(db.clone(), &address, &serialized).await?;
     let wire = WireMessage::Encrypted(message.clone());
 
@@ -118,6 +121,51 @@ pub async fn send_message(
         .await
         .map_err(|err| KursalError::Network(err.to_string()))?;
 
+    if let KursalMessage::MessageDelete(msg) = content {
+        StoredMessage::delete(&*db.0.lock().await, &contact.user_id, &msg.target_id)?;
+        return Ok(None);
+    }
+
+    if let KursalMessage::MessageEdit(msg) = content {
+        let loaded = StoredMessage::load(&*db.0.lock().await, &contact.user_id, &msg.target_id);
+
+        if let Ok(Some(mut message)) = loaded {
+            if let KursalMessage::Text(ref mut t) = message.payload {
+                t.content = msg.new_content;
+            }
+            message.edited = true;
+            let _ = message.save(&*db.0.lock().await);
+        }
+        return Ok(None);
+    }
+
+    if let KursalMessage::ReactionAdd(r) = content {
+        let loaded = StoredMessage::load(&*db.0.lock().await, &contact.user_id, &r.target_id);
+
+        if let Ok(Some(mut message)) = loaded {
+            message.reactions.push(StoredReaction {
+                emoji: r.emoji,
+                user_id: get_local_user_id(&*db.0.lock().await)?,
+                timestamp: now,
+            });
+            let _ = message.save(&*db.0.lock().await);
+        }
+        return Ok(None);
+    }
+
+    if let KursalMessage::ReactionRemove(r) = content {
+        let loaded = StoredMessage::load(&*db.0.lock().await, &contact.user_id, &r.target_id);
+
+        if let Ok(Some(mut message)) = loaded {
+            let local_user_id = get_local_user_id(&*db.0.lock().await)?;
+            message
+                .reactions
+                .retain(|rx| !(rx.emoji == r.emoji && rx.user_id == local_user_id));
+            let _ = message.save(&*db.0.lock().await);
+        }
+        return Ok(None);
+    }
+
     let Some(msg_id) = content.message_id() else {
         return Ok(None);
     };
@@ -128,12 +176,10 @@ pub async fn send_message(
         KursalMessage::DeliveryReceipt(_)
             | KursalMessage::FileChunk(_)
             | KursalMessage::CallSignal(_)
-            | KursalMessage::Reaction(_)
     ) {
         return Ok(Some(msg_id));
     }
 
-    let now = get_timestamp_secs()?;
     let stored = StoredMessage {
         id: msg_id,
         status: MessageStatus::Sending,
@@ -277,20 +323,11 @@ pub async fn handle_incoming(
         }
 
         KursalMessage::MessageDelete(ref del) => {
-            let mut message = StoredMessage::load(
+            StoredMessage::delete(
                 &*db.clone().0.lock().await,
                 &contact.user_id,
                 &del.target_id,
-            )?
-            .ok_or(KursalError::Storage("Message not found".to_string()))?;
-
-            if let KursalMessage::Text(ref mut t) = message.payload {
-                t.content = String::with_capacity(0);
-            }
-            message.deleted = true;
-            message.raw_ciphertext = None;
-
-            message.save(&*db.clone().0.lock().await)?;
+            )?;
 
             event_tx
                 .send(AppEvent::MessageDeleted {
@@ -321,7 +358,7 @@ pub async fn handle_incoming(
                 .map_err(|err| KursalError::Network(err.to_string()))?;
         }
 
-        KursalMessage::Reaction(ref r) => {
+        KursalMessage::ReactionAdd(ref r) => {
             if emojis::get(&r.emoji).is_none() {
                 log::warn!("Rejected invalid reaction emoji");
                 return Ok(());
@@ -493,6 +530,29 @@ pub enum CoreCommand {
     },
     RemoveContact {
         contact_id: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    DeleteMessage {
+        contact_id: String,
+        message_id: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    EditMessage {
+        contact_id: String,
+        message_id: String,
+        new_content: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    ReactionAdd {
+        contact_id: String,
+        message_id: String,
+        emoji: String,
+        reply: oneshot::Sender<Result<()>>,
+    },
+    ReactionRemove {
+        contact_id: String,
+        message_id: String,
+        emoji: String,
         reply: oneshot::Sender<Result<()>>,
     },
     DeleteLocalMessage {
@@ -763,6 +823,154 @@ pub async fn handle_core_command(
                 let msg_id = MessageId(id_bytes);
 
                 StoredMessage::delete(&*db.0.lock().await, &user_id, &msg_id)?;
+
+                Ok(())
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::DeleteMessage {
+            contact_id,
+            message_id,
+            reply,
+        } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
+                    .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
+
+                let message_id_bytes: [u8; 16] = hex::decode(&message_id)
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid message id length".to_string()))?;
+
+                let msg = KursalMessage::MessageDelete(MessageDelete {
+                    target_id: MessageId(message_id_bytes),
+                });
+
+                let cmd_tx = network.lock().await.primary.cmd_tx.clone();
+
+                let _msg_id = send_message(msg, &contact, db, &cmd_tx).await?;
+
+                Ok(())
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::EditMessage {
+            contact_id,
+            message_id,
+            new_content,
+            reply,
+        } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
+                    .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
+
+                let message_id_bytes: [u8; 16] = hex::decode(&message_id)
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid message id length".to_string()))?;
+
+                let now = get_timestamp_secs()?;
+
+                let msg = KursalMessage::MessageEdit(MessageEdit {
+                    target_id: MessageId(message_id_bytes),
+                    edited_at: now,
+                    new_content,
+                });
+
+                let cmd_tx = network.lock().await.primary.cmd_tx.clone();
+
+                let _msg_id = send_message(msg, &contact, db, &cmd_tx).await?;
+
+                Ok(())
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::ReactionAdd {
+            contact_id,
+            message_id,
+            emoji,
+            reply,
+        } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
+                    .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
+
+                let message_id_bytes: [u8; 16] = hex::decode(&message_id)
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid message id length".to_string()))?;
+
+                let now = get_timestamp_secs()?;
+
+                let msg = KursalMessage::ReactionAdd(ReactionAdd {
+                    target_id: MessageId(message_id_bytes),
+                    timestamp: now,
+                    emoji,
+                });
+
+                let cmd_tx = network.lock().await.primary.cmd_tx.clone();
+
+                let _msg_id = send_message(msg, &contact, db, &cmd_tx).await?;
+
+                Ok(())
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::ReactionRemove {
+            contact_id,
+            message_id,
+            emoji,
+            reply,
+        } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
+                    .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
+
+                let message_id_bytes: [u8; 16] = hex::decode(&message_id)
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid message id length".to_string()))?;
+
+                let msg = KursalMessage::ReactionRemove(ReactionRemove {
+                    target_id: MessageId(message_id_bytes),
+                    emoji,
+                });
+
+                let cmd_tx = network.lock().await.primary.cmd_tx.clone();
+
+                let _msg_id = send_message(msg, &contact, db, &cmd_tx).await?;
 
                 Ok(())
             }
