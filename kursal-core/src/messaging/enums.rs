@@ -32,7 +32,7 @@ pub enum KursalMessage {
     MessageEdit(MessageEdit),
     MessageDelete(MessageDelete),
     FileOffer(FileOffer),
-    FileChunk(FileChunk),
+    FileAccept(FileAccept),
     CallSignal(CallSignal),
     DeliveryReceipt(DeliveryReceipt),
     ProfileUpdate(ProfileInfo),
@@ -51,9 +51,9 @@ impl KursalMessage {
         match self {
             KursalMessage::Text(m) => Some(m.id),
             KursalMessage::FileOffer(m) => Some(m.id),
-            KursalMessage::FileChunk(m) => Some(m.transfer_id),
             KursalMessage::CallSignal(m) => Some(m.call_id),
             KursalMessage::DeliveryReceipt(m) => Some(m.message_id),
+            KursalMessage::FileAccept(_) => None,
             KursalMessage::ReactionAdd(_) => None,
             KursalMessage::ReactionRemove(_) => None,
             KursalMessage::MessageEdit(_) => None,
@@ -101,14 +101,13 @@ pub struct FileOffer {
     pub id: MessageId,
     pub filename: String,
     pub size_bytes: u64,
-    pub mime_type: String,
+    pub random: [u8; 32],
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct FileChunk {
-    pub transfer_id: MessageId,
-    pub index: u32,
-    pub data: Vec<u8>,
+pub struct FileAccept {
+    pub offer_id: MessageId,
+    pub random: [u8; 32],
 }
 
 #[derive(Serialize, Deserialize)]

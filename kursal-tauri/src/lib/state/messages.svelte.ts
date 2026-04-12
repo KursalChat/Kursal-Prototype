@@ -8,6 +8,8 @@ function createMessagesState() {
   let unreadByContact = $state<Record<string, number>>({});
   // keyed by `${contactId}:${messageId}`
   let reactions = $state<Record<string, Array<{ emoji: string, userIds: string[] }>>>({});
+  // keyed by transfer/message id
+  let transferProgress = $state<Record<string, { bytesTransferred: number; totalBytes: number }>>({});
   let loadedContacts = $state<Set<string>>(new Set());
 
   function reactionKey(contactId: string, messageId: string) {
@@ -181,6 +183,21 @@ function createMessagesState() {
     return reactions[reactionKey(contactId, messageId)] ?? [];
   }
 
+  function setTransferProgress(transferId: string, bytesTransferred: number, totalBytes: number) {
+    transferProgress[transferId] = { bytesTransferred, totalBytes };
+  }
+
+  function transferProgressFor(transferId: string): { bytesTransferred: number; totalBytes: number } | null {
+    return transferProgress[transferId] ?? null;
+  }
+
+  function clearTransferProgress(transferId: string) {
+    if (!transferProgress[transferId]) return;
+    const copy = { ...transferProgress };
+    delete copy[transferId];
+    transferProgress = copy;
+  }
+
   return {
     forContact,
     loadFor,
@@ -197,6 +214,9 @@ function createMessagesState() {
     addReaction,
     removeReaction,
     reactionsFor,
+    setTransferProgress,
+    transferProgressFor,
+    clearTransferProgress,
   };
 }
 

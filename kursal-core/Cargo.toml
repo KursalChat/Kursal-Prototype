@@ -41,6 +41,7 @@ pqcrypto-traits = { workspace = true }
 
 # Network
 libp2p = { workspace = true }
+libp2p-stream = { workspace = true }
 
 # Storage
 redb = { workspace = true }

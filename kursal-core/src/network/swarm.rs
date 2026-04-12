@@ -1,5 +1,6 @@
 use crate::{
     KursalError, Result,
+    api::handle_incoming::handle_incoming_stream,
     contacts::Contact,
     identity::TransportIdentity,
     network::{
@@ -21,7 +22,9 @@ use std::io;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
+pub const STREAM_PROTOCOL: StreamProtocol = StreamProtocol::new("/kursal/transfer/1.0.0");
 pub const MAX_MESSAGE_SIZE: usize = 512 * 1024; // 512 KB, should LARGE be enough
+pub const FILE_CHUNK_SIZE: usize = 64 * 1024;
 
 pub enum SwarmCommand {
     Dial(Multiaddr),
@@ -29,6 +32,11 @@ pub enum SwarmCommand {
         peer_id: PeerId,
         data: Vec<u8>,
         addresses: Vec<Multiaddr>,
+    },
+    OpenStream {
+        peer_id: PeerId,
+        addresses: Vec<Multiaddr>,
+        reply: oneshot::Sender<Option<mpsc::Sender<Vec<u8>>>>,
     },
     PublishDht {
         key: Vec<u8>,
@@ -72,9 +80,6 @@ pub enum NetworkEvent {
     ConnectionLost {
         peer_id: PeerId,
     },
-    // DhtPublishOk {
-    //     key: Vec<u8>,
-    // },
     DhtFetchResult {
         key: Vec<u8>,
         value: Option<Vec<u8>>,
@@ -94,6 +99,7 @@ pub struct KursalBehaviour {
     pub mdns: libp2p::mdns::tokio::Behaviour,
     pub identify: libp2p::identify::Behaviour,
     pub request_response: request_response::Behaviour<KursalMsgCodec>,
+    pub streaming: libp2p_stream::Behaviour,
 }
 
 pub struct SwarmHandle {
@@ -165,10 +171,17 @@ impl SwarmHandle {
                 );
 
                 let relay_server = if relay_server_enabled {
-                    Toggle::from(Some(libp2p::relay::Behaviour::new(local_peer_id, Default::default())))
+                    Toggle::from(Some(libp2p::relay::Behaviour::new(local_peer_id, libp2p::relay::Config {
+                        max_circuits: 1024,
+                        max_circuits_per_peer: 32,
+                        max_reservations: 1024,
+                        ..Default::default()
+                    })))
                 } else {
                     Toggle::from(None)
                 };
+
+                let streaming = libp2p_stream::Behaviour::new();
 
                 Ok(KursalBehaviour {
                     relay,
@@ -177,7 +190,8 @@ impl SwarmHandle {
                     kad,
                     mdns,
                     identify,
-                    request_response
+                    request_response,
+                    streaming
                 })
             })
             .map_err(|err| KursalError::Network(format!("swarm behaviour error: {err}")))?
@@ -194,6 +208,19 @@ impl SwarmHandle {
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<SwarmCommand>(32);
         let peer_id = identity.peer_id;
 
+        let mut incoming_control = swarm.behaviour().streaming.new_control();
+        let incoming_event_tx = event_tx.clone();
+        tokio::spawn(async move {
+            let mut incoming = incoming_control.accept(STREAM_PROTOCOL).unwrap();
+            while let Some((peer_id, stream)) = incoming.next().await {
+                tokio::spawn(handle_incoming_stream(
+                    peer_id,
+                    stream,
+                    incoming_event_tx.clone(),
+                ));
+            }
+        });
+
         tokio::spawn(async move {
             log::info!("[swarm] event loop started");
             let mut pending_queries: HashMap<libp2p::kad::QueryId, mpsc::Sender<Vec<u8>>> =
@@ -201,6 +228,9 @@ impl SwarmHandle {
             let mut listen_addresses: HashSet<Multiaddr> = HashSet::new();
             let mut mdns_enabled = false;
             let mut mdns_peer_buffer: Vec<(PeerId, Multiaddr)> = Vec::new();
+
+            let mut stream_control = swarm.behaviour().streaming.new_control();
+            let mut peer_streams: HashMap<PeerId, mpsc::Sender<Vec<u8>>> = HashMap::new();
 
             for addr_str in BOOTSTRAP_PEERS {
                 if let Ok(multiaddr) = addr_str.parse::<Multiaddr>()
@@ -232,7 +262,7 @@ impl SwarmHandle {
 
                                 log::info!("mDNS enabled");
                             },
-                            Some(cmd) => handle_swarm_command(cmd, &mut swarm, &mut pending_queries, &mut listen_addresses, &mut mdns_enabled),
+                            Some(cmd) => handle_swarm_command(cmd, &mut swarm, &mut pending_queries, &mut listen_addresses, &mut mdns_enabled, &mut stream_control, &mut peer_streams).await,
                             None => break
                         }
                     }
@@ -497,12 +527,14 @@ async fn handle_swarm_event(
     }
 }
 
-fn handle_swarm_command(
+async fn handle_swarm_command(
     cmd: SwarmCommand,
     swarm: &mut Swarm<KursalBehaviour>,
     pending_queries: &mut HashMap<libp2p::kad::QueryId, mpsc::Sender<Vec<u8>>>,
     listen_addresses: &mut HashSet<Multiaddr>,
     mdns_enabled: &mut bool,
+    stream_control: &mut libp2p_stream::Control,
+    peer_streams: &mut HashMap<PeerId, mpsc::Sender<Vec<u8>>>,
 ) {
     match cmd {
         SwarmCommand::Shutdown | SwarmCommand::EnableMdns => {} // handled in the loop itself
@@ -564,6 +596,28 @@ fn handle_swarm_command(
             let addrs: Vec<Multiaddr> = listen_addresses.iter().cloned().collect();
             let _ = reply_tx.send(addrs);
         }
+        SwarmCommand::OpenStream {
+            peer_id,
+            addresses,
+            reply,
+        } => {
+            for addr in addresses {
+                let _ = swarm.dial(addr);
+            }
+
+            let sender = if let Some(tx) = peer_streams.get(&peer_id) {
+                if !tx.is_closed() {
+                    Some(tx.clone())
+                } else {
+                    peer_streams.remove(&peer_id);
+                    open_peer_stream(stream_control, peer_id, peer_streams).await
+                }
+            } else {
+                open_peer_stream(stream_control, peer_id, peer_streams).await
+            };
+
+            let _ = reply.send(sender);
+        }
     }
 }
 
@@ -612,6 +666,11 @@ impl From<libp2p::identify::Event> for KursalBehaviourEvent {
 impl From<request_response::Event<Vec<u8>, Vec<u8>>> for KursalBehaviourEvent {
     fn from(value: request_response::Event<Vec<u8>, Vec<u8>>) -> Self {
         Self::RequestResponse(value)
+    }
+}
+impl From<()> for KursalBehaviourEvent {
+    fn from(_: ()) -> Self {
+        unreachable!()
     }
 }
 
@@ -770,4 +829,39 @@ pub fn str_to_multiaddr(addresses: &[String]) -> Result<Vec<Multiaddr>> {
                 .map_err(|err| KursalError::Storage(err.to_string()))
         })
         .collect()
+}
+
+pub async fn open_peer_stream(
+    control: &mut libp2p_stream::Control,
+    peer_id: PeerId,
+    peer_streams: &mut HashMap<PeerId, mpsc::Sender<Vec<u8>>>,
+) -> Option<mpsc::Sender<Vec<u8>>> {
+    let mut control = control.clone();
+
+    let mut stream = match control.open_stream(peer_id, STREAM_PROTOCOL).await {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("failed to open stream to {peer_id}: {e}");
+            return None;
+        }
+    };
+
+    let (tx, mut rx) = mpsc::channel::<Vec<u8>>(32);
+
+    tokio::spawn(async move {
+        while let Some(data) = rx.recv().await {
+            let len = data.len() as u32;
+            if stream.write_all(&len.to_be_bytes()).await.is_err() {
+                break;
+            }
+            if stream.write_all(&data).await.is_err() {
+                break;
+            }
+        }
+
+        stream.close().await.ok();
+    });
+
+    peer_streams.insert(peer_id, tx.clone());
+    Some(tx)
 }

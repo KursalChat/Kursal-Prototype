@@ -6,15 +6,37 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
-  import { sendText, deleteLocalMessage, deleteMessage, editMessage, addReaction, removeReaction } from "$lib/api/messages";
+  import {
+    sendText,
+    sendFileOffer,
+    acceptFileOffer,
+    deleteLocalMessage,
+    deleteMessage,
+    editMessage,
+    addReaction,
+    removeReaction,
+  } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
   import { marked } from "marked";
   import DOMPurify from "dompurify";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { confirm } from "@tauri-apps/plugin-dialog";
-  import { ShieldAlert, Send, Reply, Copy, ArrowLeft, X, Edit2, Trash2, Smile } from "lucide-svelte";
+  import { open, save, confirm } from "@tauri-apps/plugin-dialog";
+  import {
+    ShieldAlert,
+    Send,
+    Reply,
+    Copy,
+    ArrowLeft,
+    X,
+    Edit2,
+    Trash2,
+    Smile,
+    Paperclip,
+    File,
+    Download,
+  } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
   import Spinner from "$lib/components/Spinner.svelte";
@@ -35,6 +57,9 @@
   let replyingToMessageId = $state<string | null>(null);
   let editingMessageId = $state<string | null>(null);
   let showsReactionPicker = $state<string | null>(null);
+  let fileOfferActionState = $state<
+    Record<string, "idle" | "accepting" | "accepted">
+  >({});
   let isCoarsePointer = $state(false);
   let listEl = $state<HTMLElement | null>(null);
   let composerEl = $state<HTMLTextAreaElement | null>(null);
@@ -126,7 +151,7 @@
   }
 
   function renderMarkdown(content: string, isEdited: boolean = false): string {
-    const cacheKey = content + (isEdited ? '|edited' : '|not');
+    const cacheKey = content + (isEdited ? "|edited" : "|not");
     const cached = markdownCache.get(cacheKey);
     if (cached) return cached;
 
@@ -135,12 +160,13 @@
       gfm: true,
       breaks: true,
     }) as string;
-    
+
     if (isEdited) {
-      const editedSpan = ' <span class="edited-badge" style="font-size: 0.85em; opacity: 0.6; margin-left: 6px;">(edited)</span>';
-      if (html.endsWith('</p>\n')) {
+      const editedSpan =
+        ' <span class="edited-badge" style="font-size: 0.85em; opacity: 0.6; margin-left: 6px;">(edited)</span>';
+      if (html.endsWith("</p>\n")) {
         html = html.replace(/<\/p>\n$/, `${editedSpan}</p>\n`);
-      } else if (html.endsWith('</p>')) {
+      } else if (html.endsWith("</p>")) {
         html = html.replace(/<\/p>$/, `${editedSpan}</p>`);
       } else {
         html += editedSpan;
@@ -148,8 +174,31 @@
     }
 
     const sanitized = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ['p', 'br', 'b', 'i', 'em', 'strong', 'a', 'pre', 'code', 'blockquote', 'ul', 'ol', 'li', 'del', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'span'],
-      ALLOWED_ATTR: ['href', 'class', 'target', 'rel', 'style'] // Allow span and style
+      ALLOWED_TAGS: [
+        "p",
+        "br",
+        "b",
+        "i",
+        "em",
+        "strong",
+        "a",
+        "pre",
+        "code",
+        "blockquote",
+        "ul",
+        "ol",
+        "li",
+        "del",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "hr",
+        "span",
+      ],
+      ALLOWED_ATTR: ["href", "class", "target", "rel", "style"], // Allow span and style
     });
     markdownCache.set(cacheKey, sanitized);
     if (markdownCache.size > 600) {
@@ -203,6 +252,28 @@
       : messages;
   });
 
+  function formatFileSize(bytes: number): string {
+    if (bytes <= 0) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function transferPercent(transferId: string): number {
+    const p = messagesState.transferProgressFor(transferId);
+    if (!p || p.totalBytes <= 0) return 0;
+    return Math.max(
+      0,
+      Math.min(100, Math.round((p.bytesTransferred / p.totalBytes) * 100)),
+    );
+  }
+
+  function isTransferDone(transferId: string): boolean {
+    const p = messagesState.transferProgressFor(transferId);
+    if (!p || p.totalBytes <= 0) return false;
+    return p.bytesTransferred >= p.totalBytes;
+  }
+
   function getMessagePreview(content: string): string {
     const clean = content.replace(/\s+/g, " ").trim();
     if (!clean) return "(empty message)";
@@ -252,7 +323,11 @@
   }
 
   async function handleDelete(message: MessageResponse) {
-    if (await confirm("Are you sure you want to delete this message for everyone?")) {
+    if (
+      await confirm(
+        "Are you sure you want to delete this message for everyone?",
+      )
+    ) {
       try {
         await deleteMessage(contactId, message.id);
         messagesState.markDeleted(message.id, contactId);
@@ -266,13 +341,25 @@
   async function toggleReaction(message: MessageResponse, emoji: string) {
     try {
       const reactions = messagesState.reactionsFor(message.id, contactId);
-      const isReactedByMe = reactions.find(r => r.emoji === emoji)?.userIds.includes(profileState.userId || "");
+      const isReactedByMe = reactions
+        .find((r) => r.emoji === emoji)
+        ?.userIds.includes(profileState.userId || "");
       if (isReactedByMe) {
         await removeReaction(contactId, message.id, emoji);
-        messagesState.removeReaction(message.id, contactId, emoji, profileState.userId || "");
+        messagesState.removeReaction(
+          message.id,
+          contactId,
+          emoji,
+          profileState.userId || "",
+        );
       } else {
         await addReaction(contactId, message.id, emoji);
-        messagesState.addReaction(message.id, contactId, emoji, profileState.userId || "");
+        messagesState.addReaction(
+          message.id,
+          contactId,
+          emoji,
+          profileState.userId || "",
+        );
       }
     } catch (e) {
       console.error("React failed", e);
@@ -402,6 +489,72 @@
     }
   }
 
+  async function handleSendFile() {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+      });
+      if (!selected) return;
+
+      const selectedPath = Array.isArray(selected) ? selected[0] : selected;
+      const filePath =
+        typeof selectedPath === "string"
+          ? selectedPath
+          : String((selectedPath as { path?: string }).path ?? selectedPath);
+      const filename = filePath.split(/[\\/]/).pop() || "Unknown";
+
+      sending = true;
+      if (!contactId) return;
+
+      const [messageId, fileSize] = await sendFileOffer(contactId, filePath);
+
+      // Optimistically add to UI
+      messagesState.appendOptimistic({
+        id: messageId,
+        contactId,
+        direction: "sent",
+        content: "[File]",
+        status: "sending",
+        timestamp: Date.now(),
+        replyTo: null,
+        fileDetails: {
+          filename,
+          sizeBytes: fileSize,
+        },
+      });
+    } catch (e) {
+      notifications.push("Failed to send file", "error");
+      console.error("File send failed:", e);
+    } finally {
+      sending = false;
+    }
+  }
+
+  async function handleAcceptIncomingFile(msg: MessageResponse) {
+    if (!contactId || !msg.fileDetails) return;
+
+    const savePath = await save({ defaultPath: msg.fileDetails.filename });
+    if (!savePath) return;
+
+    const selectedPath = Array.isArray(savePath) ? savePath[0] : savePath;
+    const resolvedPath =
+      typeof selectedPath === "string"
+        ? selectedPath
+        : String((selectedPath as { path?: string }).path ?? selectedPath);
+
+    fileOfferActionState[msg.id] = "accepting";
+    try {
+      await acceptFileOffer(msg.contactId, msg.id, resolvedPath);
+      fileOfferActionState[msg.id] = "accepted";
+      notifications.push("File transfer accepted", "success");
+    } catch (e) {
+      fileOfferActionState[msg.id] = "idle";
+      notifications.push("Failed to accept file", "error");
+      console.error("Accept file offer failed", e);
+    }
+  }
+
   async function handleResend(msg: import("$lib/types").MessageResponse) {
     if (!contactId) return;
 
@@ -485,7 +638,11 @@
                 "disconnected"}
             />
             <span class="status-summary">
-              {contactsState.connectionStatus[contact.userId] === 'disconnected' || !contactsState.connectionStatus[contact.userId] ? 'offline' : contactsState.connectionStatus[contact.userId]}
+              {contactsState.connectionStatus[contact.userId] ===
+                "disconnected" ||
+              !contactsState.connectionStatus[contact.userId]
+                ? "offline"
+                : contactsState.connectionStatus[contact.userId]}
             </span>
           </div>
           <p class="peer-id">ID: {contact.userId.slice(0, 12)}...</p>
@@ -558,19 +715,76 @@
 
               <div class="selectable markdown-content">
                 <div class="message-content-inner">
-                  {@html renderMarkdown(msg.content, msg.edited)}
+                  {#if msg.fileDetails}
+                    <div class="file-offer-bubble">
+                      <div class="file-icon"><File size={28} /></div>
+                      <div class="file-details">
+                        <div class="file-name">{msg.fileDetails.filename}</div>
+                        <div class="file-size">
+                          {msg.direction === "sent"
+                            ? "Shared File"
+                            : "Received File"}{formatFileSize(
+                            msg.fileDetails.sizeBytes,
+                          )
+                            ? ` • ${formatFileSize(msg.fileDetails.sizeBytes)}`
+                            : ""}
+                        </div>
+                        {#if messagesState.transferProgressFor(msg.id)}
+                          <div class="file-progress-wrap">
+                            <div class="file-progress-bar">
+                              <div
+                                class="file-progress-fill"
+                                style={`width: ${transferPercent(msg.id)}%`}
+                              ></div>
+                            </div>
+                            <div class="file-progress-label">
+                              {transferPercent(msg.id)}%
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                      {#if msg.direction === "received"}
+                        {#if fileOfferActionState[msg.id] === "accepted"}
+                          {#if isTransferDone(msg.id)}
+                            <span
+                              class="file-offer-state accepted"
+                              aria-label="Transfer complete"
+                              title="Transfer complete">✓</span
+                            >
+                          {/if}
+                        {:else}
+                          <button
+                            class="file-download-btn"
+                            title="Accept file"
+                            disabled={fileOfferActionState[msg.id] ===
+                              "accepting"}
+                            onclick={() => handleAcceptIncomingFile(msg)}
+                          >
+                            <Download size={18} />
+                          </button>
+                        {/if}
+                      {/if}
+                    </div>
+                  {:else}
+                    {@html renderMarkdown(msg.content, msg.edited)}
+                  {/if}
                 </div>
               </div>
 
               {#if messagesState.reactionsFor(msg.id, msg.contactId).length > 0}
                 <div class="message-reactions">
                   {#each messagesState.reactionsFor(msg.id, msg.contactId) as reaction}
-                    <button 
-                      class="reaction-chip" 
-                      class:by-me={reaction.userIds.includes(profileState.userId || "")} 
+                    <button
+                      class="reaction-chip"
+                      class:by-me={reaction.userIds.includes(
+                        profileState.userId || "",
+                      )}
                       onclick={() => toggleReaction(msg, reaction.emoji)}
                     >
-                      {reaction.emoji} {#if reaction.userIds.length > 1}<span class="reaction-count">{reaction.userIds.length}</span>{/if}
+                      {reaction.emoji}
+                      {#if reaction.userIds.length > 1}<span
+                          class="reaction-count">{reaction.userIds.length}</span
+                        >{/if}
                     </button>
                   {/each}
                 </div>
@@ -604,13 +818,21 @@
                           onclick={async () => {
                             try {
                               await deleteLocalMessage(msg.contactId, msg.id);
-                              messagesState.removeLocally(msg.id, msg.contactId);
+                              messagesState.removeLocally(
+                                msg.id,
+                                msg.contactId,
+                              );
                             } catch (e) {
-                              console.error("Failed to delete local message", e);
-                              notifications.push("Failed to delete message", "error");
+                              console.error(
+                                "Failed to delete local message",
+                                e,
+                              );
+                              notifications.push(
+                                "Failed to delete message",
+                                "error",
+                              );
                             }
-                          }}
-                          >Delete</button
+                          }}>Delete</button
                         >
                       </div>
                     {/if}
@@ -630,8 +852,8 @@
                           onclick={() => {
                             toggleReaction(msg, emoji);
                             showsReactionPicker = null;
-                          }}
-                        >{emoji}</button>
+                          }}>{emoji}</button
+                        >
                       {/each}
                     </div>
                   {/if}
@@ -639,7 +861,10 @@
                     class="action-btn"
                     title="Add reaction"
                     type="button"
-                    onclick={() => showsReactionPicker = showsReactionPicker === msg.id ? null : msg.id}><Smile size={14} /></button
+                    onclick={() =>
+                      (showsReactionPicker =
+                        showsReactionPicker === msg.id ? null : msg.id)}
+                    ><Smile size={14} /></button
                   >
                 </div>
                 <button
@@ -660,8 +885,7 @@
                     class="action-btn"
                     title="Edit"
                     type="button"
-                    onclick={() => startEdit(msg)}
-                    ><Edit2 size={14} /></button
+                    onclick={() => startEdit(msg)}><Edit2 size={14} /></button
                   >
                   <button
                     class="action-btn"
@@ -711,6 +935,16 @@
             >
           </div>
         {/if}
+
+        <button
+          class="attach-button action-btn"
+          type="button"
+          title="Attach file"
+          onclick={handleSendFile}
+          disabled={sending}
+        >
+          <Paperclip size={18} />
+        </button>
 
         <textarea
           bind:this={composerEl}
@@ -1052,7 +1286,9 @@
     font-size: 13px;
     line-height: 1.2;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
     user-select: none;
     color: inherit;
     outline: none;
@@ -1190,6 +1426,116 @@
     margin-bottom: 0;
   }
 
+  .file-offer-bubble {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    min-width: 250px;
+    max-width: 320px;
+  }
+
+  .file-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+  }
+
+  .file-details {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .file-name {
+    font-weight: 500;
+    font-size: 0.95rem;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .file-size {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .file-progress-wrap {
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .file-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .file-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2563eb, #38bdf8);
+    transition: width 120ms linear;
+  }
+
+  .file-progress-label {
+    min-width: 34px;
+    text-align: right;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+
+  .file-download-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition:
+      background var(--transition),
+      transform 0.1s ease;
+  }
+
+  .file-download-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .file-download-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .file-download-btn:active {
+    transform: scale(0.95);
+  }
+
+  .file-offer-state {
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .file-offer-state.accepted {
+    color: #34d399;
+  }
+
   .reaction-emoji-btn {
     background: transparent;
     border: none;
@@ -1197,7 +1543,9 @@
     cursor: pointer;
     padding: 4px 6px;
     border-radius: 6px;
-    transition: transform 0.15s ease-out, background 0.15s;
+    transition:
+      transform 0.15s ease-out,
+      background 0.15s;
   }
 
   .reaction-emoji-btn:hover {
@@ -1214,10 +1562,34 @@
     );
     border-top: 1px solid var(--border);
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr auto;
     gap: 10px;
     align-items: end;
     position: relative;
+  }
+
+  .attach-button {
+    background: none;
+    border: none;
+    color: var(--text-light);
+    cursor: pointer;
+    padding: 10px 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      color var(--transition),
+      background var(--transition);
+  }
+
+  .attach-button:hover:not(:disabled) {
+    color: var(--text);
+  }
+
+  .attach-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .unread-banner {
@@ -1342,6 +1714,7 @@
     gap: 8px;
     padding: 16px;
     width: 100%;
+    grid-column: 1 / -1;
     text-align: center;
     color: var(--text-muted);
     font-size: 14px;

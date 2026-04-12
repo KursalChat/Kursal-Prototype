@@ -17,6 +17,9 @@
     MessageEditedPayload,
     MessageDeletedPayload,
     ReactionChangedPayload,
+    FileOfferedPayload,
+    FileTransferProgressPayload,
+    FileReceivedPayload,
   } from "$lib/types";
 
   let { children } = $props();
@@ -131,7 +134,7 @@
           event.payload.messageId,
           event.payload.contactId,
           event.payload.emoji,
-          event.payload.contactId
+          event.payload.contactId,
         );
       }),
     );
@@ -143,7 +146,7 @@
           event.payload.messageId,
           event.payload.contactId,
           event.payload.emoji,
-          event.payload.contactId
+          event.payload.contactId,
         );
       }),
     );
@@ -229,6 +232,45 @@
           `Contact file expires in ${hours} hour${hours === 1 ? "" : "s"}.`,
           "info",
         );
+      }),
+    );
+
+    // Listen to file_offered event
+    unlistenPromises.push(
+      listen<FileOfferedPayload>("file_offered", (event) => {
+        const payload = event.payload;
+        messagesState.append({
+          id: payload.offerId,
+          contactId: payload.contactId,
+          direction: "received",
+          content: "[File]",
+          status: "delivered",
+          timestamp: Date.now(),
+          replyTo: null,
+          fileDetails: {
+            filename: payload.filename,
+            sizeBytes: payload.sizeBytes,
+          },
+        });
+      }),
+    );
+
+    // Listen to file transfer progress
+    unlistenPromises.push(
+      listen<FileTransferProgressPayload>("file_transfer_progress", (event) => {
+        const { transferId, bytesTransferred, totalBytes } = event.payload;
+        messagesState.setTransferProgress(transferId, bytesTransferred, totalBytes);
+      }),
+    );
+
+    // Listen to file_received event
+    unlistenPromises.push(
+      listen<FileReceivedPayload>("file_received", (event) => {
+        const { contactId, savePath } = event.payload;
+        const filename = savePath.split(/[\\/]/).pop() || "file";
+        const contact = contactsState.getById(contactId);
+        const contactName = contact?.displayName ?? "Contact";
+        notifications.push(`Received ${filename} from ${contactName}`, "success");
       }),
     );
 

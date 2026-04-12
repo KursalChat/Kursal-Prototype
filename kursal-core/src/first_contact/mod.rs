@@ -14,11 +14,19 @@ pub struct ContactResponse {
     pub relay_addresses: Vec<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct FileTransferMessage {
+    pub transfer_id: [u8; 16],
+    pub index: u32,
+    pub data: Vec<u8>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub enum WireMessage {
     Encrypted(Vec<u8>),                   // for normal encrypted libsignal
     ContactResponse(ContactResponse),     // for OTP / LTC handshake
     KeyRotationAnnouncement(KeyRotation), // for peer id rotation
+    FileTransfer(FileTransferMessage),
 }
 
 pub fn make_username(peer_id: &str) -> String {

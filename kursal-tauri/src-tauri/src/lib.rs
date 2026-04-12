@@ -223,6 +223,8 @@ pub fn run() {
             commands::edit_message,
             commands::add_reaction,
             commands::remove_reaction,
+            commands::accept_file_offer,
+            commands::send_file_offer,
             //
             benchmark::run_otp_benchmark,
             benchmark::cancel_benchmark,
@@ -406,6 +408,54 @@ async fn handle_core_event(
         AppEvent::ContactRemoved { contact_id } => {
             handle
                 .emit("contact_removed", hex::encode(contact_id.0))
+                .ok();
+        }
+        AppEvent::FileOffered {
+            contact_id,
+            offer_id,
+            filename,
+            size_bytes,
+        } => {
+            handle
+                .emit(
+                    "file_offered",
+                    serde_json::json!({
+                        "contactId": hex::encode(contact_id.0),
+                        "offerId": hex::encode(offer_id.0),
+                        "filename": filename,
+                        "sizeBytes": size_bytes
+                    }),
+                )
+                .ok();
+        }
+        AppEvent::FileTransferProgress {
+            transfer_id,
+            bytes_transferred,
+            total_bytes,
+        } => {
+            handle
+                .emit(
+                    "file_transfer_progress",
+                    serde_json::json!({
+                        "transferId": hex::encode(transfer_id.0),
+                        "bytesTransferred": bytes_transferred,
+                        "totalBytes": total_bytes
+                    }),
+                )
+                .ok();
+        }
+        AppEvent::FileReceived {
+            contact_id,
+            save_path,
+        } => {
+            handle
+                .emit(
+                    "file_received",
+                    serde_json::json!({
+                        "contactId": hex::encode(contact_id.0),
+                        "savePath": save_path,
+                    }),
+                )
                 .ok();
         }
     }

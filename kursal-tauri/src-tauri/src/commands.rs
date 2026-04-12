@@ -586,6 +586,58 @@ pub async fn remove_reaction(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn send_file_offer(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    file_path: String,
+) -> Result<(String, u64)> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::SendFileOffer {
+            contact_id,
+            file_path,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    let (msg_id, file_size) = reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok((hex::encode(msg_id.0), file_size))
+}
+
+#[tauri::command]
+pub async fn accept_file_offer(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+    offer_id: String,
+    save_path: String,
+) -> Result<()> {
+    let (reply_tx, reply_rx) = oneshot::channel();
+
+    state
+        .core_cmd_tx
+        .send(CoreCommand::AcceptFileOffer {
+            contact_id,
+            offer_id,
+            save_path,
+            reply: reply_tx,
+        })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    reply_rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))??;
+
+    Ok(())
+}
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn check_for_updates(app: tauri::AppHandle) -> std::result::Result<(), String> {

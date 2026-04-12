@@ -31,6 +31,8 @@ pub const TABLE_CONTACTS: TableDefinition<&str, &[u8]> = TableDefinition::new("c
 pub const TABLE_MESSAGES: TableDefinition<&str, &[u8]> = TableDefinition::new("messages");
 pub const TABLE_LTC_CACHE: TableDefinition<&str, &[u8]> = TableDefinition::new("ltc_cache");
 pub const TABLE_SETTINGS: TableDefinition<&str, &[u8]> = TableDefinition::new("settings");
+pub const TABLE_FILE_TRANSFERS: TableDefinition<&str, &[u8]> =
+    TableDefinition::new("file_transfers");
 
 pub struct Database {
     inner: redb::Database,

@@ -19,6 +19,12 @@ export const addReaction = (contactId: string, messageId: string, emoji: string)
 export const removeReaction = (contactId: string, messageId: string, emoji: string): Promise<void> =>
   invoke('remove_reaction', { contactId, messageId, emoji });
 
+export const sendFileOffer = (contactId: string, filePath: string): Promise<[string, number]> =>
+  invoke('send_file_offer', { contactId, filePath });
+
+export const acceptFileOffer = (contactId: string, offerId: string, savePath: string): Promise<void> =>
+  invoke('accept_file_offer', { contactId, offerId, savePath });
+
 export const getMessages = async (
   contactId: string,
   limit = 100,

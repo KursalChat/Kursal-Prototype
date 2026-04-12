@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { save } from "@tauri-apps/plugin-dialog";
-  import { writeFile } from "@tauri-apps/plugin-fs";
+  import { writeFile, readFile } from "@tauri-apps/plugin-fs";
   import { exportLtc, importLtc } from "$lib/api/ltc";
   import { notifications } from "$lib/state/notifications.svelte";
   import { contactsState } from "$lib/state/contacts.svelte";
@@ -19,6 +21,65 @@
   let importing = $state(false);
   let importError = $state("");
   let dragging = $state(false);
+
+  let unlistenPromises: Array<Promise<() => void>> = [];
+
+  onMount(() => {
+    unlistenPromises.push(
+      listen<{ paths: string[] }>("tauri://drag-enter", () => {
+        if (mode === "import") dragging = true;
+      }),
+    );
+    unlistenPromises.push(
+      listen<{ paths: string[] }>("tauri://drag-leave", () => {
+        if (mode === "import") dragging = false;
+      }),
+    );
+    unlistenPromises.push(
+      listen<{ paths: string[] }>("tauri://drag-drop", async (event) => {
+        if (mode === "import") {
+          dragging = false;
+          if (event.payload.paths && event.payload.paths.length > 0) {
+            await handleImportPath(event.payload.paths[0]);
+          }
+        }
+      }),
+    );
+
+    return () => {
+      unlistenPromises.forEach((p) => p.then((unlisten) => unlisten()));
+    };
+  });
+
+  async function handleImportPath(path: string) {
+    if (!path.endsWith(".kursal")) {
+      importError = "Invalid file type. Please select a .kursal file.";
+      return;
+    }
+
+    importing = true;
+    importError = "";
+    try {
+      const bytesArr = await readFile(path);
+      const bytes = Array.from(bytesArr);
+      const contact = await importLtc(bytes);
+      contactsState.upsert(contact);
+      notifications.push("Contact file imported", "success");
+      goto(`/chat/${contact.userId}`);
+    } catch (e) {
+      const errMsg = String(e);
+      if (errMsg.includes("expired")) {
+        importError =
+          "This contact file has expired. Ask your contact to generate a new one.";
+      } else {
+        importError =
+          "Invalid file. Please select a valid .kursal contact file. " + errMsg;
+      }
+      console.error("Import failed:", e);
+    } finally {
+      importing = false;
+    }
+  }
 
   async function handleExport() {
     exporting = true;

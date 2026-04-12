@@ -21,6 +21,7 @@ export interface MessageResponse {
   replyTo: string | null; // hex of MessageId bytes
   reactions?: { emoji: string; userId: string }[];
   edited?: boolean;
+  fileDetails?: { filename: string; sizeBytes: number } | null;
 }
 
 export interface OtpResponse {
@@ -61,4 +62,22 @@ export interface ReactionChangedPayload {
   messageId: string;
   emoji: string;
   userId?: string;
+}
+
+export interface FileOfferedPayload {
+  offerId: string;
+  contactId: string;
+  filename: string;
+  sizeBytes: number;
+}
+
+export interface FileTransferProgressPayload {
+  transferId: string;
+  bytesTransferred: number;
+  totalBytes: number;
+}
+
+export interface FileReceivedPayload {
+  contactId: string;
+  savePath: string;
 }

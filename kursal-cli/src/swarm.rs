@@ -51,7 +51,15 @@ pub async fn spawn_relay_swarm(config: &RelayConfig, config_path: &Path) -> Resu
             |key| -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
                 let local_peer_id = key.public().to_peer_id();
 
-                let relay = libp2p::relay::Behaviour::new(local_peer_id, Default::default());
+                let relay = libp2p::relay::Behaviour::new(
+                    local_peer_id,
+                    libp2p::relay::Config {
+                        max_circuits: 1024,
+                        max_circuits_per_peer: 32,
+                        max_reservations: 1024,
+                        ..Default::default()
+                    },
+                );
 
                 let mut kad = libp2p::kad::Behaviour::with_config(
                     local_peer_id,

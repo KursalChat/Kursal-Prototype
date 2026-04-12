@@ -43,6 +43,13 @@ pub struct ReactionResponse {
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct FileDetailsDto {
+    pub filename: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct MessageResponse {
     pub id: String,
     pub contact_id: String,
@@ -53,6 +60,7 @@ pub struct MessageResponse {
     pub reply_to: Option<String>,
     pub edited: bool,
     pub reactions: Vec<ReactionResponse>,
+    pub file_details: Option<FileDetailsDto>,
 }
 
 impl From<StoredMessage> for MessageResponse {
@@ -71,6 +79,14 @@ impl From<StoredMessage> for MessageResponse {
             })
             .collect();
 
+        let file_details = match &value.payload {
+            KursalMessage::FileOffer(f) => Some(FileDetailsDto {
+                filename: f.filename.clone(),
+                size_bytes: f.size_bytes,
+            }),
+            _ => None,
+        };
+
         Self {
             id: hex::encode(value.id.0),
             contact_id: hex::encode(value.contact_id.0),
@@ -85,7 +101,7 @@ impl From<StoredMessage> for MessageResponse {
                 KursalMessage::MessageEdit(e) => format!("Edited {}", e.new_content),
                 KursalMessage::MessageDelete(_) => String::new(),
                 KursalMessage::FileOffer(f) => format!("File: {}", f.filename),
-                KursalMessage::FileChunk(_) => "[file chunk]".to_string(),
+                KursalMessage::FileAccept(_) => format!("[file offer reply]"),
                 KursalMessage::CallSignal(_) => "[call]".to_string(),
                 KursalMessage::DeliveryReceipt(_) => "[receipt]".to_string(),
                 KursalMessage::ProfileUpdate(_) => "[profile updated]".to_string(),
@@ -99,6 +115,7 @@ impl From<StoredMessage> for MessageResponse {
             reply_to,
             edited: value.edited,
             reactions: db_reactions,
+            file_details,
         }
     }
 }

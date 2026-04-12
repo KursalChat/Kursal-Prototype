@@ -25,7 +25,6 @@ pub struct StoredMessage {
     pub timestamp: u64,
     pub raw_ciphertext: Option<Vec<u8>>,
     pub edited: bool,
-    pub deleted: bool,
     pub reactions: Vec<StoredReaction>,
 }
 

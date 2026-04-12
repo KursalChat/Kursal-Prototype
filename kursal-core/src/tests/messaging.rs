@@ -109,7 +109,6 @@ async fn test_message_roundtrip_with_receipt() {
         status: MessageStatus::Sending,
         timestamp: get_timestamp_secs().unwrap(),
         raw_ciphertext: Some(ciphertext.clone()),
-        deleted: false,
         edited: false,
         reactions: vec![],
     };
@@ -204,7 +203,6 @@ async fn test_tampered_receipt_stays_sending() {
         status: MessageStatus::Sending,
         timestamp: get_timestamp_secs().unwrap(),
         raw_ciphertext: Some(ciphertext.clone()),
-        deleted: false,
         edited: false,
         reactions: vec![],
     };
@@ -278,7 +276,6 @@ async fn test_load_all_filters_by_contact() {
             status: MessageStatus::Delivered,
             timestamp: get_timestamp_secs().unwrap(),
             raw_ciphertext: None,
-            deleted: false,
             edited: false,
             reactions: vec![],
         }
