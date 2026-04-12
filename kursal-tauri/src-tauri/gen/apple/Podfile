@@ -1,13 +1,13 @@
 # Uncomment the next line to define a global platform for your project
 
-target 'kursal-tauri_iOS' do
+target 'kursal-app_iOS' do
 platform :ios, '14.0'
-  # Pods for kursal-tauri_iOS
+  # Pods for kursal-app_iOS
 end
 
-target 'kursal-tauri_macOS' do
+target 'kursal-app_macOS' do
 platform :osx, '11.0'
-  # Pods for kursal-tauri_macOS
+  # Pods for kursal-app_macOS
 end
 
 # Delete the deployment target for iOS and macOS, causing it to be inherited from the Podfile

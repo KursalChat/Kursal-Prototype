@@ -47,6 +47,7 @@ pub async fn init(
             master_key
         } else {
             if db_path.exists() {
+                // TODO: make that a popup i guess
                 return Err(KursalError::Storage(
                     "Database exists but master_key could not be found.".to_string(),
                 ));

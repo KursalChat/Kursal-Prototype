@@ -1,4 +1,4 @@
-name: kursal-tauri
+name: kursal-app
 options:
   bundleIdPrefix: chat.kursal
   deploymentTarget:
@@ -24,20 +24,20 @@ targetTemplates:
     settings:
       groups: [app]
 targets:
-  kursal-tauri_iOS:
+  kursal-app_iOS:
     type: application
     platform: iOS
     sources:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
-      - path: kursal-tauri_iOS
+      - path: kursal-app_iOS
       - path: assets
         buildPhase: resources
         type: folder
       - path: LaunchScreen.storyboard
     info:
-      path: kursal-tauri_iOS/Info.plist
+      path: kursal-app_iOS/Info.plist
       properties:
         LSRequiresIPhoneOS: true
         UILaunchStoryboardName: LaunchScreen
@@ -51,10 +51,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        CFBundleShortVersionString: 0.1.0
-        CFBundleVersion: "0.1.0"
+        CFBundleShortVersionString: 1.0.0
+        CFBundleVersion: "1.0.0"
     entitlements:
-      path: kursal-tauri_iOS/kursal-tauri_iOS.entitlements
+      path: kursal-app_iOS/kursal-app_iOS.entitlements
     scheme:
       environmentVariables:
         RUST_BACKTRACE: full

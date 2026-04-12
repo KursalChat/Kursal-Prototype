@@ -7,172 +7,180 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1CC33674D5F9189D633CC626 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B9A00505CDC1DE40539EF618 /* libapp.a */; };
-		3C6D82FC2F7E94690039939C /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C6D82FB2F7E94690039939C /* SystemConfiguration.framework */; };
-		3D9D46E445330ED737D878A8 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8527BBD6A407EA3AB1EA4D9 /* CoreGraphics.framework */; };
-		41247C86666DCFB37C015D51 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4CA35CB535686A158D1F89A4 /* QuartzCore.framework */; };
-		7816DA55BFEF01C21E83D442 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5E415554447AA801E64F828B /* main.mm */; };
-		835964454824318856E14146 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CAD72AF732FB8854C30FCD02 /* Security.framework */; };
-		8CDABD1271AB4E5350C90DD7 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5641B6DC5F3A16B07B42018B /* Metal.framework */; };
-		AA6722D4ACA4E6FB8490F509 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2BF1081E866117FA166263BB /* Assets.xcassets */; };
-		C0857D1D6700032AD764F675 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42957F3A234D4E7FE3A8BF3E /* MetalKit.framework */; };
-		C23DD35E4EC7C2DB5F8D009B /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6336846886AEA554FE011FA5 /* UIKit.framework */; };
-		D1CF21C9910C19E11BCC556B /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E318E58D5B531A860F884C9A /* LaunchScreen.storyboard */; };
-		E8692C3E4AA9125209699BA2 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AC3B9B48FA1743C1CB354D9E /* WebKit.framework */; };
-		F719BE85C168635E37AB3F7B /* assets in Resources */ = {isa = PBXBuildFile; fileRef = 0EFCD8E53081E374937D3DEE /* assets */; };
+		03292CA97A236C9F06C1CBE9 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8208DB159B774D618416E141 /* MetalKit.framework */; };
+		14137334A2C9CD56E48C43D4 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCB6133124F63490FFCDD057 /* QuartzCore.framework */; };
+		27718EF9873752374C674036 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0915A2ECF156877C70B60661 /* CoreGraphics.framework */; };
+		3C28D2D52F8B97DB00145107 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C28D2D42F8B97DB00145107 /* SystemConfiguration.framework */; };
+		3C28D2D72F8B97E500145107 /* CFNetwork.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C28D2D62F8B97E500145107 /* CFNetwork.framework */; };
+		7DE505869E868D66E050CC18 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DEF5B3EC8F872F3354FB6483 /* Metal.framework */; };
+		7DF08C5EBDB00BBF4470613C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F2A9C48386F9EEED7BF64A11 /* Assets.xcassets */; };
+		827EC28BA6513DD51E0BF707 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7B02636B4E22515660BF0BD5 /* Security.framework */; };
+		835BDCDE10C3DA828A8BFA68 /* main.mm in Sources */ = {isa = PBXBuildFile; fileRef = CBD4C60E897D9FCCEEF8B189 /* main.mm */; };
+		A6FB7C9E8D7AFF4E4F474993 /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 696D9A1C0B34A251FC3ACAC8 /* WebKit.framework */; };
+		B9A095153CDBE77C081DCBB1 /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 993A17A9F33B99FDD5D789C5 /* UIKit.framework */; };
+		CA305974FA248A6D4C11FE73 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 961A73FA84BC6CBDDD9B290B /* LaunchScreen.storyboard */; };
+		D2513B86991E01008E0B51E0 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 80A34972D6AE3775CA2852D3 /* libapp.a */; };
+		DF4DCDA9633D9B622190D79D /* assets in Resources */ = {isa = PBXBuildFile; fileRef = E02141DCC2A04FA3A3F83CD1 /* assets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		0444A381DB3E88886A14B90A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
-		0B5DA7AF675503F666766CDF /* kursal-app_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "kursal-app_iOS.entitlements"; sourceTree = "<group>"; };
-		0EFCD8E53081E374937D3DEE /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
-		2BF1081E866117FA166263BB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		3171A2AACE6FA8249B448B0A /* lib.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = lib.rs; sourceTree = "<group>"; };
-		3C6D82FB2F7E94690039939C /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
-		42957F3A234D4E7FE3A8BF3E /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
-		47B7FC7FD4904B924B070ADD /* dto.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = dto.rs; sourceTree = "<group>"; };
-		4CA35CB535686A158D1F89A4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
-		5113AE4FA3CCBE56EB55945F /* state.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = state.rs; sourceTree = "<group>"; };
-		5641B6DC5F3A16B07B42018B /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
-		5E415554447AA801E64F828B /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
-		6336846886AEA554FE011FA5 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
-		70434234F1FDEE753E50D4DA /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
-		8E4DAD62CE0482DD9F9E5D75 /* main.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = main.rs; sourceTree = "<group>"; };
-		972171610A051C03557D5D93 /* error.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = error.rs; sourceTree = "<group>"; };
-		AC3B9B48FA1743C1CB354D9E /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
-		B9A00505CDC1DE40539EF618 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
-		C8527BBD6A407EA3AB1EA4D9 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
-		CAD72AF732FB8854C30FCD02 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
-		DB98C8C2CB38260923C42F72 /* Kursal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kursal.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E318E58D5B531A860F884C9A /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		F3B712A1ACF4E790A0B47C50 /* commands.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = commands.rs; sourceTree = "<group>"; };
+		0071CAFE2534BF3EA242FCE7 /* error.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = error.rs; sourceTree = "<group>"; };
+		067E11608129902376C68A11 /* Kursal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Kursal.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0915A2ECF156877C70B60661 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		22EE85424D969FC621C6E45F /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
+		360B018C347123A24F6645DE /* dto.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = dto.rs; sourceTree = "<group>"; };
+		3B2E1B1172C2DE498A2E865A /* dirs.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = dirs.rs; sourceTree = "<group>"; };
+		3C28D2D42F8B97DB00145107 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
+		3C28D2D62F8B97E500145107 /* CFNetwork.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CFNetwork.framework; path = System/Library/Frameworks/CFNetwork.framework; sourceTree = SDKROOT; };
+		42C71FF711B5D2F1A76AF368 /* benchmark.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = benchmark.rs; sourceTree = "<group>"; };
+		4F3207ED8D0A019FDFBE5A9B /* main.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = main.rs; sourceTree = "<group>"; };
+		696D9A1C0B34A251FC3ACAC8 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
+		7B02636B4E22515660BF0BD5 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		80A34972D6AE3775CA2852D3 /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
+		8208DB159B774D618416E141 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		858090C8552CF8A1355899DB /* kursal-app_iOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "kursal-app_iOS.entitlements"; sourceTree = "<group>"; };
+		913A5756A077151672169130 /* lib.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = lib.rs; sourceTree = "<group>"; };
+		961A73FA84BC6CBDDD9B290B /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		980D93947BC3CD1677C73EA2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		993A17A9F33B99FDD5D789C5 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
+		A2EF64A3BADEA36B82EC8147 /* commands.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = commands.rs; sourceTree = "<group>"; };
+		AB8B18B7E63AB3C91C46A019 /* file.rs */ = {isa = PBXFileReference; lastKnownFileType = text; path = file.rs; sourceTree = "<group>"; };
+		BCB6133124F63490FFCDD057 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		CBD4C60E897D9FCCEEF8B189 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		DEF5B3EC8F872F3354FB6483 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		E02141DCC2A04FA3A3F83CD1 /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
+		F2A9C48386F9EEED7BF64A11 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		C354379B2005CD5B2DE1F5FD /* Frameworks */ = {
+		2275A8743D7B6BA7944C9F52 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1CC33674D5F9189D633CC626 /* libapp.a in Frameworks */,
-				3C6D82FC2F7E94690039939C /* SystemConfiguration.framework in Frameworks */,
-				3D9D46E445330ED737D878A8 /* CoreGraphics.framework in Frameworks */,
-				8CDABD1271AB4E5350C90DD7 /* Metal.framework in Frameworks */,
-				C0857D1D6700032AD764F675 /* MetalKit.framework in Frameworks */,
-				41247C86666DCFB37C015D51 /* QuartzCore.framework in Frameworks */,
-				835964454824318856E14146 /* Security.framework in Frameworks */,
-				C23DD35E4EC7C2DB5F8D009B /* UIKit.framework in Frameworks */,
-				E8692C3E4AA9125209699BA2 /* WebKit.framework in Frameworks */,
+				D2513B86991E01008E0B51E0 /* libapp.a in Frameworks */,
+				3C28D2D52F8B97DB00145107 /* SystemConfiguration.framework in Frameworks */,
+				27718EF9873752374C674036 /* CoreGraphics.framework in Frameworks */,
+				7DE505869E868D66E050CC18 /* Metal.framework in Frameworks */,
+				3C28D2D72F8B97E500145107 /* CFNetwork.framework in Frameworks */,
+				03292CA97A236C9F06C1CBE9 /* MetalKit.framework in Frameworks */,
+				14137334A2C9CD56E48C43D4 /* QuartzCore.framework in Frameworks */,
+				827EC28BA6513DD51E0BF707 /* Security.framework in Frameworks */,
+				B9A095153CDBE77C081DCBB1 /* UIKit.framework in Frameworks */,
+				A6FB7C9E8D7AFF4E4F474993 /* WebKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0C4B4A8973FAF4FACE376422 = {
+		2AF0DEB36C024529AA8D256C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0EFCD8E53081E374937D3DEE /* assets */,
-				2BF1081E866117FA166263BB /* Assets.xcassets */,
-				E318E58D5B531A860F884C9A /* LaunchScreen.storyboard */,
-				3CE70CB1A2E3F1DB57584AFA /* Externals */,
-				8745160C4E19316BA2CAC1A3 /* kursal-app_iOS */,
-				EB69A7A602BAAEE74820F411 /* Sources */,
-				910016251E513503CD6978C2 /* src */,
-				8FBA5054B94BF6F97B460F59 /* Frameworks */,
-				24FD39FEA6E1693BDF8657E8 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
-		2088DEE7FC68B250D7E50CBA /* bindings */ = {
-			isa = PBXGroup;
-			children = (
-				70434234F1FDEE753E50D4DA /* bindings.h */,
-			);
-			path = bindings;
-			sourceTree = "<group>";
-		};
-		24FD39FEA6E1693BDF8657E8 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				DB98C8C2CB38260923C42F72 /* Kursal.app */,
+				067E11608129902376C68A11 /* Kursal.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		3CE70CB1A2E3F1DB57584AFA /* Externals */ = {
+		327ED1AEE3BA4E02DAE4605A /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				7F01EC790A4495C52DB5DB1B /* kursal-app */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		37A9E159095AD36026F23E31 /* kursal-app_iOS */ = {
+			isa = PBXGroup;
+			children = (
+				980D93947BC3CD1677C73EA2 /* Info.plist */,
+				858090C8552CF8A1355899DB /* kursal-app_iOS.entitlements */,
+			);
+			path = "kursal-app_iOS";
+			sourceTree = "<group>";
+		};
+		3B62E2244D25FCADC316B5B3 /* bindings */ = {
+			isa = PBXGroup;
+			children = (
+				22EE85424D969FC621C6E45F /* bindings.h */,
+			);
+			path = bindings;
+			sourceTree = "<group>";
+		};
+		42257558370C4D67EF297866 /* Externals */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = Externals;
 			sourceTree = "<group>";
 		};
-		8745160C4E19316BA2CAC1A3 /* kursal-app_iOS */ = {
+		513018DA581111706607CAE9 = {
 			isa = PBXGroup;
 			children = (
-				0444A381DB3E88886A14B90A /* Info.plist */,
-				0B5DA7AF675503F666766CDF /* kursal-app_iOS.entitlements */,
+				E02141DCC2A04FA3A3F83CD1 /* assets */,
+				F2A9C48386F9EEED7BF64A11 /* Assets.xcassets */,
+				961A73FA84BC6CBDDD9B290B /* LaunchScreen.storyboard */,
+				42257558370C4D67EF297866 /* Externals */,
+				37A9E159095AD36026F23E31 /* kursal-app_iOS */,
+				327ED1AEE3BA4E02DAE4605A /* Sources */,
+				EED3E5A53C263F4A798383CC /* src */,
+				BA735FB5DDA71FA5EAD35FFA /* Frameworks */,
+				2AF0DEB36C024529AA8D256C /* Products */,
 			);
-			path = "kursal-app_iOS";
 			sourceTree = "<group>";
 		};
-		8FBA5054B94BF6F97B460F59 /* Frameworks */ = {
+		7F01EC790A4495C52DB5DB1B /* kursal-app */ = {
 			isa = PBXGroup;
 			children = (
-				3C6D82FB2F7E94690039939C /* SystemConfiguration.framework */,
-				C8527BBD6A407EA3AB1EA4D9 /* CoreGraphics.framework */,
-				B9A00505CDC1DE40539EF618 /* libapp.a */,
-				5641B6DC5F3A16B07B42018B /* Metal.framework */,
-				42957F3A234D4E7FE3A8BF3E /* MetalKit.framework */,
-				4CA35CB535686A158D1F89A4 /* QuartzCore.framework */,
-				CAD72AF732FB8854C30FCD02 /* Security.framework */,
-				6336846886AEA554FE011FA5 /* UIKit.framework */,
-				AC3B9B48FA1743C1CB354D9E /* WebKit.framework */,
+				CBD4C60E897D9FCCEEF8B189 /* main.mm */,
+				3B62E2244D25FCADC316B5B3 /* bindings */,
+			);
+			path = "kursal-app";
+			sourceTree = "<group>";
+		};
+		BA735FB5DDA71FA5EAD35FFA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				3C28D2D62F8B97E500145107 /* CFNetwork.framework */,
+				3C28D2D42F8B97DB00145107 /* SystemConfiguration.framework */,
+				0915A2ECF156877C70B60661 /* CoreGraphics.framework */,
+				80A34972D6AE3775CA2852D3 /* libapp.a */,
+				DEF5B3EC8F872F3354FB6483 /* Metal.framework */,
+				8208DB159B774D618416E141 /* MetalKit.framework */,
+				BCB6133124F63490FFCDD057 /* QuartzCore.framework */,
+				7B02636B4E22515660BF0BD5 /* Security.framework */,
+				993A17A9F33B99FDD5D789C5 /* UIKit.framework */,
+				696D9A1C0B34A251FC3ACAC8 /* WebKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		910016251E513503CD6978C2 /* src */ = {
+		EED3E5A53C263F4A798383CC /* src */ = {
 			isa = PBXGroup;
 			children = (
-				F3B712A1ACF4E790A0B47C50 /* commands.rs */,
-				47B7FC7FD4904B924B070ADD /* dto.rs */,
-				972171610A051C03557D5D93 /* error.rs */,
-				3171A2AACE6FA8249B448B0A /* lib.rs */,
-				8E4DAD62CE0482DD9F9E5D75 /* main.rs */,
-				5113AE4FA3CCBE56EB55945F /* state.rs */,
+				42C71FF711B5D2F1A76AF368 /* benchmark.rs */,
+				A2EF64A3BADEA36B82EC8147 /* commands.rs */,
+				3B2E1B1172C2DE498A2E865A /* dirs.rs */,
+				360B018C347123A24F6645DE /* dto.rs */,
+				0071CAFE2534BF3EA242FCE7 /* error.rs */,
+				AB8B18B7E63AB3C91C46A019 /* file.rs */,
+				913A5756A077151672169130 /* lib.rs */,
+				4F3207ED8D0A019FDFBE5A9B /* main.rs */,
 			);
 			name = src;
 			path = ../../src;
 			sourceTree = "<group>";
 		};
-		BB0D5BA065FF431165C8B458 /* kursal-tauri */ = {
-			isa = PBXGroup;
-			children = (
-				5E415554447AA801E64F828B /* main.mm */,
-				2088DEE7FC68B250D7E50CBA /* bindings */,
-			);
-			path = "kursal-tauri";
-			sourceTree = "<group>";
-		};
-		EB69A7A602BAAEE74820F411 /* Sources */ = {
-			isa = PBXGroup;
-			children = (
-				BB0D5BA065FF431165C8B458 /* kursal-tauri */,
-			);
-			path = Sources;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2255F4D369BCBA58CF977FB5 /* kursal-app_iOS */ = {
+		F72A473B4EFC359620FB541D /* kursal-app_iOS */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = FD87F9F871C035B7735D17BC /* Build configuration list for PBXNativeTarget "kursal-app_iOS" */;
+			buildConfigurationList = 479C0A74FFE17FF09F343177 /* Build configuration list for PBXNativeTarget "kursal-app_iOS" */;
 			buildPhases = (
-				5A79B7038B7E1F5612078A56 /* Build Rust Code */,
-				4346D15C1A1F6B271E2982EF /* Sources */,
-				E356149385E32AF899566C41 /* Resources */,
-				C354379B2005CD5B2DE1F5FD /* Frameworks */,
+				06DDFB05E21B442DACE6BD10 /* Build Rust Code */,
+				890E028AA8D06CA40D859048 /* Sources */,
+				F1E825CB7F6BB28684CC4306 /* Resources */,
+				2275A8743D7B6BA7944C9F52 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -182,52 +190,52 @@
 			packageProductDependencies = (
 			);
 			productName = "kursal-app_iOS";
-			productReference = DB98C8C2CB38260923C42F72 /* Kursal.app */;
+			productReference = 067E11608129902376C68A11 /* Kursal.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		58B539EE4D01DE0E53059BCE /* Project object */ = {
+		B8D8ED2A4F0D48C9B724FCFA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 			};
-			buildConfigurationList = 35F6004F1225219E91ECEF09 /* Build configuration list for PBXProject "kursal-app" */;
+			buildConfigurationList = 231B96CCB52B889246C55B92 /* Build configuration list for PBXProject "kursal-app" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
 			);
-			mainGroup = 0C4B4A8973FAF4FACE376422;
+			mainGroup = 513018DA581111706607CAE9;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 24FD39FEA6E1693BDF8657E8 /* Products */;
+			productRefGroup = 2AF0DEB36C024529AA8D256C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				2255F4D369BCBA58CF977FB5 /* kursal-app_iOS */,
+				F72A473B4EFC359620FB541D /* kursal-app_iOS */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E356149385E32AF899566C41 /* Resources */ = {
+		F1E825CB7F6BB28684CC4306 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA6722D4ACA4E6FB8490F509 /* Assets.xcassets in Resources */,
-				D1CF21C9910C19E11BCC556B /* LaunchScreen.storyboard in Resources */,
-				F719BE85C168635E37AB3F7B /* assets in Resources */,
+				7DF08C5EBDB00BBF4470613C /* Assets.xcassets in Resources */,
+				CA305974FA248A6D4C11FE73 /* LaunchScreen.storyboard in Resources */,
+				DF4DCDA9633D9B622190D79D /* assets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		5A79B7038B7E1F5612078A56 /* Build Rust Code */ = {
+		06DDFB05E21B442DACE6BD10 /* Build Rust Code */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -251,18 +259,18 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		4346D15C1A1F6B271E2982EF /* Sources */ = {
+		890E028AA8D06CA40D859048 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7816DA55BFEF01C21E83D442 /* main.mm in Sources */,
+				835BDCDE10C3DA828A8BFA68 /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		188BD3FBA84272F711D92111 /* debug */ = {
+		4B336ACD05B874FB40743AC5 /* debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -325,18 +333,15 @@
 			};
 			name = debug;
 		};
-		86E6832D369E9AC5D5773890 /* debug */ = {
+		627B9E59E036063E2D792A3B /* release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = "kursal-app_iOS/kursal-app_iOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = "Q4L6S4627U";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -366,14 +371,13 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = chat.kursal;
 				PRODUCT_NAME = "Kursal";
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
 			};
-			name = debug;
+			name = release;
 		};
-		9EC2F2BF20BE07668C1C92D3 /* release */ = {
+		6F3A443213037AEA910F4EF7 /* release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -429,18 +433,15 @@
 			};
 			name = release;
 		};
-		A002AC8DD82F27142E1A0DAC /* release */ = {
+		90982A8821F0EDC62C1DA9D5 /* debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGNING_ALLOWED = NO;
-				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = "kursal-app_iOS/kursal-app_iOS.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = "Q4L6S4627U";
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphoneos*]" = x86_64;
 				FRAMEWORK_SEARCH_PATHS = (
@@ -470,35 +471,34 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = chat.kursal;
 				PRODUCT_NAME = "Kursal";
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VALID_ARCHS = arm64;
 			};
-			name = release;
+			name = debug;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		35F6004F1225219E91ECEF09 /* Build configuration list for PBXProject "kursal-app" */ = {
+		231B96CCB52B889246C55B92 /* Build configuration list for PBXProject "kursal-app" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				188BD3FBA84272F711D92111 /* debug */,
-				9EC2F2BF20BE07668C1C92D3 /* release */,
+				4B336ACD05B874FB40743AC5 /* debug */,
+				6F3A443213037AEA910F4EF7 /* release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;
 		};
-		FD87F9F871C035B7735D17BC /* Build configuration list for PBXNativeTarget "kursal-app_iOS" */ = {
+		479C0A74FFE17FF09F343177 /* Build configuration list for PBXNativeTarget "kursal-app_iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				86E6832D369E9AC5D5773890 /* debug */,
-				A002AC8DD82F27142E1A0DAC /* release */,
+				90982A8821F0EDC62C1DA9D5 /* debug */,
+				627B9E59E036063E2D792A3B /* release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = debug;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 58B539EE4D01DE0E53059BCE /* Project object */;
+	rootObject = B8D8ED2A4F0D48C9B724FCFA /* Project object */;
 }

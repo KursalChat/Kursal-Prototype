@@ -2,7 +2,7 @@
   "name": "kursal-app",
   "type": "module",
   "scripts": {
-    "dev": "lsof -i :1420 > /dev/null 2>&1 || bunx --bun vite dev",
+    "dev": "lsof -i :1420 > /dev/null 2>&1 || bunx --bun vite dev --host 0.0.0.0",
     "build": "bunx --bun vite build",
     "preview": "bunx --bun vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -533,9 +533,16 @@
 
   async function handleAcceptIncomingFile(msg: MessageResponse) {
     if (!contactId || !msg.fileDetails) return;
+    if (fileOfferActionState[msg.id] === "accepting" || fileOfferActionState[msg.id] === "accepted") return;
+
+    // Prevent immediate double clicks before file dialog opens
+    fileOfferActionState[msg.id] = "accepting";
 
     const savePath = await save({ defaultPath: msg.fileDetails.filename });
-    if (!savePath) return;
+    if (!savePath) {
+      fileOfferActionState[msg.id] = "idle";
+      return;
+    }
 
     const selectedPath = Array.isArray(savePath) ? savePath[0] : savePath;
     const resolvedPath =
@@ -543,7 +550,6 @@
         ? selectedPath
         : String((selectedPath as { path?: string }).path ?? selectedPath);
 
-    fileOfferActionState[msg.id] = "accepting";
     try {
       await acceptFileOffer(msg.contactId, msg.id, resolvedPath);
       fileOfferActionState[msg.id] = "accepted";

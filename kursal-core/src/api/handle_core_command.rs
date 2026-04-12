@@ -530,7 +530,7 @@ pub async fn handle_core_command(
                     .try_fill_bytes(&mut my_random)
                     .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
-                let key = derive_stream_key(my_random, entry.their_random);
+                let key = derive_stream_key(entry.their_random, my_random);
 
                 let updated_entry = FileReceiveEntry {
                     key,
