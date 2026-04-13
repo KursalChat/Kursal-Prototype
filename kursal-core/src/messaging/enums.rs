@@ -156,6 +156,12 @@ impl ProfileInfo {
             ));
         }
 
+        if self.display_name.trim().is_empty() {
+            return Err(KursalError::Identity(
+                "Profile display name cannot be empty.".to_string(),
+            ));
+        }
+
         if self.display_name.len() < 3 || self.display_name.len() > 32 {
             return Err(KursalError::Identity(
                 "Profile display name must be between 3 and 32 characters.".to_string(),
@@ -163,11 +169,20 @@ impl ProfileInfo {
         }
 
         // TODO: maybe allow better rules :p
-        if !self.display_name.is_ascii() {
+        if !self
+            .display_name
+            .chars()
+            .all(|c| c.is_alphanumeric() || " ._-".contains(c))
+        {
             return Err(KursalError::Identity(
-                "Profile display name must only contain ascii characters.".to_string(),
+                "Profile display name must only contain alphabetical, numerical characters or . _ or -.".to_string(),
             ));
-        };
+        }
+        // if !self.display_name.is_ascii() {
+        //     return Err(KursalError::Identity(
+        //         "Profile display name must only contain ascii characters.".to_string(),
+        //     ));
+        // };
 
         Ok(())
     }

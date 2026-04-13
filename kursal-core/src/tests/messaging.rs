@@ -30,7 +30,7 @@ async fn make_db(name: &str) -> SharedDatabase {
     identity::init(
         &path,
         &KeychainConfig {
-            storage_id: "master".to_string(),
+            storage_id: "test".to_string(),
             unsafe_write_key_to_file: false,
         },
         &APP_DATA_DIR,

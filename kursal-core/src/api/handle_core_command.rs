@@ -447,7 +447,7 @@ pub async fn handle_core_command(
                 let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
                     .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
 
-                let metadata = std::fs::metadata(&file_path).map_err(|err| KursalError::Io(err))?;
+                let metadata = std::fs::metadata(&file_path).map_err(KursalError::Io)?;
 
                 if !metadata.is_file() {
                     return Err(KursalError::Storage(
@@ -522,7 +522,8 @@ pub async fn handle_core_command(
                 let file = std::fs::File::create(&save_path).map_err(KursalError::Io)?;
                 file.set_len(entry.file_size).map_err(KursalError::Io)?;
 
-                let chunk_count = entry.file_size.div_ceil(FILE_CHUNK_SIZE as u64) as usize;
+                let chunk_count = usize::try_from(entry.file_size.div_ceil(FILE_CHUNK_SIZE as u64))
+                    .map_err(|err| KursalError::Storage(err.to_string()))?;
                 let bitset_len = chunk_count.div_ceil(8);
 
                 let mut my_random = [0u8; 32];

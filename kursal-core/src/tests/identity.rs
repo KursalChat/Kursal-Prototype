@@ -22,7 +22,7 @@ async fn identity_init_idempotent() {
     let db1 = init(
         &path,
         &KeychainConfig {
-            storage_id: "master".to_string(),
+            storage_id: "test".to_string(),
             unsafe_write_key_to_file: false,
         },
         &APP_DATA_DIR,
@@ -35,7 +35,7 @@ async fn identity_init_idempotent() {
     let db2 = init(
         &path,
         &KeychainConfig {
-            storage_id: "master".to_string(),
+            storage_id: "test".to_string(),
             unsafe_write_key_to_file: false,
         },
         &APP_DATA_DIR,
@@ -56,7 +56,7 @@ async fn identity_user_id_stable() {
     let db = init(
         &path,
         &KeychainConfig {
-            storage_id: "master".to_string(),
+            storage_id: "test".to_string(),
             unsafe_write_key_to_file: false,
         },
         &APP_DATA_DIR,

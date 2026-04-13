@@ -101,7 +101,7 @@ impl From<StoredMessage> for MessageResponse {
                 KursalMessage::MessageEdit(e) => format!("Edited {}", e.new_content),
                 KursalMessage::MessageDelete(_) => String::new(),
                 KursalMessage::FileOffer(f) => format!("File: {}", f.filename),
-                KursalMessage::FileAccept(_) => format!("[file offer reply]"),
+                KursalMessage::FileAccept(_) => "[file offer reply]".to_string(),
                 KursalMessage::CallSignal(_) => "[call]".to_string(),
                 KursalMessage::DeliveryReceipt(_) => "[receipt]".to_string(),
                 KursalMessage::ProfileUpdate(_) => "[profile updated]".to_string(),

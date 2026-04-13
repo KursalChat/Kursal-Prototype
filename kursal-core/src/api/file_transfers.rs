@@ -86,7 +86,7 @@ pub async fn send_file_chunks(
 
     //
 
-    let mut file = File::open(&file_path).await.map_err(KursalError::Io)?;
+    let mut file: File = File::open(&file_path).await.map_err(KursalError::Io)?;
 
     let mut index: u32 = 0;
     let mut buffer = vec![0u8; FILE_CHUNK_SIZE];

@@ -7,7 +7,7 @@
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
   import { getLocalPeerId, getLocalUserProfile } from "$lib/api/identity";
-  import { UserPlus, Settings as SettingsIcon } from "lucide-svelte";
+  import { UserPlus, Settings as SettingsIcon, Menu, X } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
 
@@ -21,14 +21,19 @@
   });
 
   function handleAddContact() {
+    mobileSidebarOpen = false;
     goto("/add-contact");
   }
 
   function handleSettings() {
+    mobileSidebarOpen = false;
     goto("/settings");
   }
 
   const totalUnread = $derived(messagesState.totalUnread());
+
+  // Mobile sidebar drawer state
+  let mobileSidebarOpen = $state(false);
 
   onMount(() => {
     let unlisten: UnlistenFn | undefined;
@@ -40,12 +45,12 @@
         unlisten = await listen<string[]>("peer_id_rotated", async () => {
           await profileState.refreshPeerId();
         });
-        
+
         await listen<string>("contact_removed", (e) => {
           const removedId = e.payload;
           contactsState.remove(removedId);
           if (currentChatId === removedId) {
-             goto("/chat", { replaceState: true });
+            goto("/chat", { replaceState: true });
           }
         });
       } catch (e) {
@@ -63,7 +68,27 @@
 </script>
 
 <div class="shell" class:chat-active={!!currentChatId}>
-  <aside class="sidebar">
+  <!-- Backdrop for mobile drawer -->
+  <div
+    class="sidebar-backdrop"
+    class:open={mobileSidebarOpen}
+    onclick={() => (mobileSidebarOpen = false)}
+    aria-hidden="true"
+  ></div>
+
+  <!-- Mobile toggle button bar -->
+  <div class="mobile-app-bar" class:hidden={mobileSidebarOpen}>
+    <button
+      class="mobile-toggle"
+      onclick={() => (mobileSidebarOpen = true)}
+      aria-label="Open menu"
+    >
+      <Menu size={24} />
+    </button>
+    <div class="mobile-app-title">Kursal</div>
+  </div>
+
+  <aside class="sidebar" class:open={mobileSidebarOpen}>
     <div class="header glass">
       <div class="brand-block">
         <h1>Kursal</h1>
@@ -100,20 +125,30 @@
           <button
             class="contact-item"
             class:active={currentChatId === contact.userId}
-            onclick={() => goto("/chat/" + contact.userId)}
+            onclick={() => {
+              goto("/chat/" + contact.userId);
+              mobileSidebarOpen = false;
+            }}
           >
-            <Avatar name={contact.displayName} src={contact.avatarBase64} size={36} />
+            <Avatar
+              name={contact.displayName}
+              src={contact.avatarBase64}
+              size={36}
+            />
             <div class="contact-info">
               <div class="contact-name-row">
                 <div class="contact-name">{contact.displayName}</div>
                 {#if messagesState.unreadFor(contact.userId) > 0}
-                  <span class="unread-pill" aria-label={`${messagesState.unreadFor(contact.userId)} unread messages`}>
+                  <span
+                    class="unread-pill"
+                    aria-label={`${messagesState.unreadFor(contact.userId)} unread messages`}
+                  >
                     {messagesState.unreadFor(contact.userId)}
                   </span>
                 {/if}
               </div>
               <div class="contact-status">
-                {#if contactsState.connectionStatus[contact.userId] && contactsState.connectionStatus[contact.userId] !== 'disconnected'}
+                {#if contactsState.connectionStatus[contact.userId] && contactsState.connectionStatus[contact.userId] !== "disconnected"}
                   <StatusDot
                     status={contactsState.connectionStatus[contact.userId]}
                   />
@@ -132,7 +167,11 @@
     </div>
 
     <div class="user-panel">
-      <Avatar name={profileState.displayName} src={profileState.avatarBase64} size={42} />
+      <Avatar
+        name={profileState.displayName}
+        src={profileState.avatarBase64}
+        size={42}
+      />
       <div class="user-meta">
         <p class="user-name">{profileState.displayName}</p>
         <p class="user-id">
@@ -142,7 +181,11 @@
         </p>
       </div>
       {#if totalUnread > 0}
-        <span class="total-unread" aria-label={`${totalUnread} total unread messages`}>{totalUnread}</span>
+        <span
+          class="total-unread"
+          aria-label={`${totalUnread} total unread messages`}
+          >{totalUnread}</span
+        >
       {/if}
     </div>
   </aside>
@@ -159,6 +202,15 @@
     overflow: hidden;
     padding: 0;
     gap: 0;
+    position: relative;
+  }
+
+  .sidebar-backdrop {
+    display: none;
+  }
+
+  .mobile-app-bar {
+    display: none;
   }
 
   .sidebar {
@@ -175,18 +227,117 @@
   .content {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
     position: relative;
+    display: flex;
+    flex-direction: column;
     background: var(--bg-primary);
   }
 
   @media (max-width: 768px) {
-    .sidebar {
-      width: 100%;
+    .shell {
+      position: relative;
     }
-    .shell.chat-active .sidebar {
+    .sidebar {
+      width: 280px; /* fixed size drawer */
+      max-width: 85%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 50; /* Above backdrop */
+      transform: translateX(-100%);
+      transition:
+        transform 0.3s cubic-bezier(0.3, 0, 0, 1),
+        opacity 0.3s;
+      box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+      visibility: hidden;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+      visibility: visible;
+    }
+
+    .content {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      background: var(--bg-primary);
+      z-index: 10;
+      transform: none; /* Always in view */
+      transition: none;
+    }
+
+    .sidebar-backdrop {
+      display: block;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 40; /* Below sidebar, above content */
+      backdrop-filter: blur(2px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .sidebar-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .mobile-app-bar {
+      display: flex;
+      align-items: center;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 30;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+    .mobile-app-bar.hidden {
       display: none;
     }
+
+    .mobile-app-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-left: 14px;
+      color: var(--text-primary);
+    }
+
+    .mobile-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      border-radius: 8px;
+      cursor: pointer;
+      margin-left: -8px; /* align flush edge */
+    }
+
+    /* Hide the app bar when inside a chat */
+    .shell.chat-active .mobile-app-bar {
+      display: none;
+    }
+
+    /* Push the content down when the app bar is visible to prevent overlap with pages like add-contact */
     .shell:not(.chat-active) .content {
+      padding-top: 60px;
+    }
+
+    .shell.chat-active .sidebar {
       display: none;
     }
   }
@@ -396,15 +547,6 @@
 
   .status-text {
     text-transform: capitalize;
-  }
-
-  .content {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
-    backdrop-filter: blur(12px);
   }
 
   @media (max-width: 960px) {

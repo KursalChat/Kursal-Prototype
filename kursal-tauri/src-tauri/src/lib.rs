@@ -466,7 +466,7 @@ pub(crate) async fn check_for_updates_impl(
     _app: AppHandle,
     _manual: bool,
 ) -> tauri_plugin_updater::Result<()> {
-    return Ok(()); // do not try to update on dev mode
+    Ok(()) // do not try to update on dev mode
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios", dev)))]

@@ -17,6 +17,11 @@
     removeReaction,
   } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
+  import {
+    prepareOfferSourcePath,
+    resolveReceiveSavePath,
+    registerDeferredReceiveTarget,
+  } from "$lib/utils/file-transfer-paths";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
   import { marked } from "marked";
@@ -494,20 +499,25 @@
       const selected = await open({
         multiple: false,
         directory: false,
+        pickerMode: "document",
+        fileAccessMode: "copy",
       });
       if (!selected) return;
 
       const selectedPath = Array.isArray(selected) ? selected[0] : selected;
-      const filePath =
+      const rawPath =
         typeof selectedPath === "string"
           ? selectedPath
           : String((selectedPath as { path?: string }).path ?? selectedPath);
-      const filename = filePath.split(/[\\/]/).pop() || "Unknown";
+      const prepared = await prepareOfferSourcePath(rawPath);
 
       sending = true;
       if (!contactId) return;
 
-      const [messageId, fileSize] = await sendFileOffer(contactId, filePath);
+      const [messageId, fileSize] = await sendFileOffer(
+        contactId,
+        prepared.backendPath,
+      );
 
       // Optimistically add to UI
       messagesState.appendOptimistic({
@@ -519,7 +529,7 @@
         timestamp: Date.now(),
         replyTo: null,
         fileDetails: {
-          filename,
+          filename: prepared.filename,
           sizeBytes: fileSize,
         },
       });
@@ -538,20 +548,33 @@
     // Prevent immediate double clicks before file dialog opens
     fileOfferActionState[msg.id] = "accepting";
 
-    const savePath = await save({ defaultPath: msg.fileDetails.filename });
+    const savePath = await save({
+      defaultPath: msg.fileDetails.filename,
+    });
     if (!savePath) {
       fileOfferActionState[msg.id] = "idle";
       return;
     }
 
     const selectedPath = Array.isArray(savePath) ? savePath[0] : savePath;
-    const resolvedPath =
+    const rawPath =
       typeof selectedPath === "string"
         ? selectedPath
         : String((selectedPath as { path?: string }).path ?? selectedPath);
 
     try {
-      await acceptFileOffer(msg.contactId, msg.id, resolvedPath);
+      const resolved = await resolveReceiveSavePath(
+        rawPath,
+        msg.fileDetails.filename,
+      );
+      await acceptFileOffer(msg.contactId, msg.id, resolved.backendPath);
+      if (resolved.deferredTargetUri) {
+        registerDeferredReceiveTarget(
+          resolved.backendPath,
+          resolved.deferredTargetUri,
+          msg.fileDetails.filename,
+        );
+      }
       fileOfferActionState[msg.id] = "accepted";
       notifications.push("File transfer accepted", "success");
     } catch (e) {
@@ -573,6 +596,49 @@
 
     // Attempt sending again
     messagesState.removeLocally(msg.id, msg.contactId);
+
+    if (msg.fileDetails) {
+      try {
+        const selected = await open({
+          multiple: false,
+          directory: false,
+          defaultPath: msg.fileDetails.filename,
+          pickerMode: "document",
+          fileAccessMode: "copy",
+        });
+        if (!selected) return;
+
+        const selectedPath = Array.isArray(selected) ? selected[0] : selected;
+        const rawPath =
+          typeof selectedPath === "string"
+            ? selectedPath
+            : String((selectedPath as { path?: string }).path ?? selectedPath);
+        const prepared = await prepareOfferSourcePath(rawPath);
+
+        const [messageId, fileSize] = await sendFileOffer(
+          contactId,
+          prepared.backendPath,
+        );
+
+        messagesState.appendOptimistic({
+          id: messageId,
+          contactId,
+          direction: "sent",
+          content: "[File]",
+          status: "sending",
+          timestamp: Date.now(),
+          replyTo: null,
+          fileDetails: {
+            filename: prepared.filename,
+            sizeBytes: fileSize,
+          },
+        });
+      } catch (e) {
+        notifications.push("Failed to resend file", "error");
+        console.error("File resend failed:", e);
+      }
+      return;
+    }
 
     const text = msg.content;
     const replyTo = msg.replyTo;

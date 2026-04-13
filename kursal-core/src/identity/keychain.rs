@@ -13,7 +13,7 @@ const MASTER_SECRET_LEN: usize = 32;
 pub fn init_keychain() -> Result<()> {
     #[cfg(target_os = "android")]
     keyring::use_named_store("android").map_err(|err| KursalError::Storage(err.to_string()))?;
-    #[cfg(any(target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     keyring::use_named_store("keychain").map_err(|err| KursalError::Storage(err.to_string()))?;
     #[cfg(target_os = "ios")]
     keyring::use_named_store("protected").map_err(|err| KursalError::Storage(err.to_string()))?;

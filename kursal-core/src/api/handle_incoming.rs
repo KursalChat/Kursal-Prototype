@@ -9,8 +9,7 @@ use crate::{
     api::{
         AppEvent,
         file_transfers::{
-            FileIncomingEntry, FileReceiveEntry, FileTransferEntry,
-            send_file_chunks,
+            FileIncomingEntry, FileReceiveEntry, FileTransferEntry, send_file_chunks,
         },
         send_message,
     },
@@ -150,7 +149,8 @@ pub async fn handle_incoming(
                 .await
                 .raw_write(TABLE_FILE_TRANSFERS, &key, &entry.serialize()?)?;
 
-            let chunk_count = entry.file_size.div_ceil(FILE_CHUNK_SIZE as u64) as usize;
+            let chunk_count = usize::try_from(entry.file_size.div_ceil(FILE_CHUNK_SIZE as u64))
+                .map_err(|err| KursalError::Storage(err.to_string()))?;
             let all_received = entry.received_chunks.iter().enumerate().all(|(i, byte)| {
                 let bits_in_byte = (chunk_count - i * 8).min(8);
                 let mask = if bits_in_byte >= 8 {
@@ -371,9 +371,9 @@ pub async fn handle_incoming(
 
         KursalMessage::FileOffer(ref file) => {
             let filename = file.filename.clone();
-            let offer_id = file.id.clone();
-            let size_bytes = file.size_bytes.clone();
-            let file_random = file.random.clone();
+            let offer_id = file.id;
+            let size_bytes = file.size_bytes;
+            let file_random = file.random;
 
             let stored = StoredMessage {
                 id: file.id,

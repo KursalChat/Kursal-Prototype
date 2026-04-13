@@ -850,7 +850,12 @@ pub async fn open_peer_stream(
 
     tokio::spawn(async move {
         while let Some(data) = rx.recv().await {
-            let len = data.len() as u32;
+            let Ok(len) =
+                u32::try_from(data.len()).map_err(|err| KursalError::Storage(err.to_string()))
+            else {
+                break;
+            };
+
             if stream.write_all(&len.to_be_bytes()).await.is_err() {
                 break;
             }

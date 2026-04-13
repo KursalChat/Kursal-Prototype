@@ -8,6 +8,7 @@
   import { messagesState } from "$lib/state/messages.svelte";
   import { nearbyState } from "$lib/state/nearby.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
+  import { finalizeDeferredReceiveTarget } from "$lib/utils/file-transfer-paths";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
   import type {
     MessageReceivedPayload,
@@ -265,9 +266,21 @@
 
     // Listen to file_received event
     unlistenPromises.push(
-      listen<FileReceivedPayload>("file_received", (event) => {
+      listen<FileReceivedPayload>("file_received", async (event) => {
         const { contactId, savePath } = event.payload;
-        const filename = savePath.split(/[\\/]/).pop() || "file";
+        let filename = savePath.split(/[\\/]/).pop() || "file";
+
+        try {
+          const finalized = await finalizeDeferredReceiveTarget(savePath);
+          filename = finalized.filename;
+        } catch (err) {
+          notifications.push(
+            "Received file but could not place it in the selected location",
+            "error",
+          );
+          console.error("Deferred receive finalization failed", err);
+        }
+
         const contact = contactsState.getById(contactId);
         const contactName = contact?.displayName ?? "Contact";
         notifications.push(`Received ${filename} from ${contactName}`, "success");

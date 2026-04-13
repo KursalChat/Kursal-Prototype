@@ -3609,11 +3609,11 @@ dependencies = [
 
 [[package]]
 name = "kursal"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.10"
 
 [[package]]
 name = "kursal-app"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3636,7 +3636,7 @@ dependencies = [
 
 [[package]]
 name = "kursal-cli"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.10"
 dependencies = [
  "anyhow",
  "axum",
@@ -3651,7 +3651,7 @@ dependencies = [
 
 [[package]]
 name = "kursal-core"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.10"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4356,7 +4356,7 @@ dependencies = [
 
 [[package]]
 name = "libsignal-debug"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.10"
 dependencies = [
  "cfg-if",
 ]

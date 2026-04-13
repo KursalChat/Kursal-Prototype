@@ -6,13 +6,9 @@ use sha2::Sha256;
 use crate::{KursalError, Result};
 
 pub fn derive_stream_key(my_random: [u8; 32], their_random: [u8; 32]) -> [u8; 32] {
-    let xor: Vec<_> = my_random
-        .iter()
-        .zip(their_random)
-        .map(|(x, y)| x ^ y)
-        .collect();
+    let combined = [my_random, their_random].concat();
 
-    let hk = Hkdf::<Sha256>::new(None, &xor);
+    let hk = Hkdf::<Sha256>::new(None, &combined);
     let mut key = [0u8; 32];
 
     hk.expand(b"kursal-stream-key", &mut key).unwrap();

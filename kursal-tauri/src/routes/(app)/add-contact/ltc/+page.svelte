@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { listen } from "@tauri-apps/api/event";
-  import { save } from "@tauri-apps/plugin-dialog";
+  import { open, save } from "@tauri-apps/plugin-dialog";
   import { writeFile, readFile } from "@tauri-apps/plugin-fs";
   import { exportLtc, importLtc } from "$lib/api/ltc";
   import { notifications } from "$lib/state/notifications.svelte";
@@ -91,7 +91,7 @@
         filters: [
           {
             name: "Kursal data file",
-            extensions: ["kursal"],
+            extensions: ["kursal", "application/octet-stream"],
           },
         ],
       });
@@ -156,7 +156,34 @@
 
   let fileInput = $state<HTMLInputElement | null>(null);
 
-  function handleDropZoneClick() {
+  async function handleDropZoneClick() {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        pickerMode: "document",
+        fileAccessMode: "copy",
+        filters: [
+          {
+            name: "Kursal data file",
+            extensions: ["kursal", "application/octet-stream"],
+          },
+        ],
+      });
+
+      if (selected) {
+        const selectedPath = Array.isArray(selected) ? selected[0] : selected;
+        const path =
+          typeof selectedPath === "string"
+            ? selectedPath
+            : String((selectedPath as { path?: string }).path ?? selectedPath);
+        await handleImportPath(path);
+        return;
+      }
+    } catch (err) {
+      console.warn("Dialog picker unavailable, falling back to HTML input", err);
+    }
+
     fileInput?.click();
   }
 
