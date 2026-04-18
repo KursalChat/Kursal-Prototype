@@ -230,7 +230,7 @@
     </div>
   {/if}
 
-  {#if !isCoarsePointer && (hovered || emojiOpen)}
+  {#if !isCoarsePointer && (hovered || emojiOpen) && msg.status !== "sending" && msg.status !== "failed"}
     <div class="msg-actions" class:sent={msg.direction === "sent"}>
       <button
         class="act-btn"

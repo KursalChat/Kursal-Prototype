@@ -12,6 +12,10 @@
     localStorage.setItem("kursal_onboarded", "done");
     goto("/chat");
   }
+
+  function goToLast() {
+    screen = 5;
+  }
 </script>
 
 <div class="onboarding" class:bright={screen === 5}>
@@ -21,7 +25,7 @@
   <div class="stage">
     {#if screen === 1}
       <div class="screen-wrap" data-key="1">
-        <Screen1 onNext={() => (screen = 2)} onSkip={finish} />
+        <Screen1 onNext={() => (screen = 2)} onSkip={goToLast} />
       </div>
     {:else if screen === 2}
       <div class="screen-wrap" data-key="2">

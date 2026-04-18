@@ -3,6 +3,7 @@ use crate::{
     first_contact::nearby::{BtEvent, NearbyBeacon, NearbyMessage, NearbyTransport},
     network::swarm::SwarmCommand,
 };
+#[cfg(not(target_os = "android"))]
 use ble_peripheral_rust::{
     Peripheral as PeripheralAd, PeripheralImpl,
     gatt::{
@@ -30,7 +31,9 @@ use uuid::Uuid;
 
 const SERVICE_UUID: Uuid = Uuid::from_u128(0x4b75_7273_616c_0001_0000_0000_0000_0001);
 const CHAR_UUID: Uuid = Uuid::from_u128(0x4b75_7273_616c_0001_0000_0000_0000_0002);
+#[cfg(not(target_os = "android"))]
 const POWER_POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(not(target_os = "android"))]
 const POWER_POLL_MAX_ATTEMPTS: u32 = 60;
 
 const FRAG_HEADER_LEN: usize = 12;
@@ -38,10 +41,12 @@ const ATT_OVERHEAD: usize = 3;
 const DEFAULT_CHUNK_SIZE: usize = 180;
 const MIN_CHUNK_SIZE: usize = 8;
 const MAX_CHUNK_SIZE: usize = 500;
+#[cfg(not(target_os = "android"))]
 const REASSEMBLY_TTL: Duration = Duration::from_secs(60);
 const PEER_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 const PEER_WAIT_POLL: Duration = Duration::from_millis(250);
 
+#[cfg(not(target_os = "android"))]
 #[derive(Clone)]
 struct PartialMsg {
     total: usize,
@@ -50,6 +55,7 @@ struct PartialMsg {
     created_at: Instant,
 }
 
+#[cfg(not(target_os = "android"))]
 type ReassemblyMap = Arc<Mutex<HashMap<(String, u64), PartialMsg>>>;
 
 #[derive(Serialize, Deserialize)]
@@ -63,6 +69,7 @@ struct BtPeer {
     write_char: Characteristic,
 }
 
+#[cfg(not(target_os = "android"))]
 struct AdvState {
     peripheral: PeripheralAd,
     service_added: bool,
@@ -80,8 +87,10 @@ pub struct BTTransport {
     pub pending_handshakes: Arc<Mutex<HashMap<String, mpsc::Sender<NearbyMessage>>>>,
     pub bt_event_tx: mpsc::Sender<BtEvent>,
     peers: Arc<Mutex<HashMap<String, BtPeer>>>,
+    #[cfg(not(target_os = "android"))]
     adv: Arc<Mutex<Option<AdvState>>>,
     scan: Arc<Mutex<Option<ScanState>>>,
+    #[cfg(not(target_os = "android"))]
     reassembly: ReassemblyMap,
 }
 
@@ -97,8 +106,10 @@ impl BTTransport {
             pending_handshakes: Arc::new(Mutex::new(HashMap::new())),
             bt_event_tx,
             peers: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(not(target_os = "android"))]
             adv: Arc::new(Mutex::new(None)),
             scan: Arc::new(Mutex::new(None)),
+            #[cfg(not(target_os = "android"))]
             reassembly: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -115,6 +126,7 @@ impl NearbyTransport for BTTransport {
             log::error!("[bt] scanner start: {err}");
         }
 
+        #[cfg(not(target_os = "android"))]
         if let Err(err) = start_advertiser(
             &self.adv,
             beacon,
@@ -125,6 +137,12 @@ impl NearbyTransport for BTTransport {
         .await
         {
             log::error!("[bt] advertiser start: {err}");
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            let _ = beacon;
+            log::info!("[bt] android: discovery-only, no advertising");
         }
     }
 
@@ -139,6 +157,7 @@ impl NearbyTransport for BTTransport {
             }
         }
 
+        #[cfg(not(target_os = "android"))]
         if let Some(state) = self.adv.lock().await.as_mut()
             && state.advertising
         {
@@ -400,6 +419,7 @@ async fn handshake_with_peer(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 async fn start_advertiser(
     adv: &Arc<Mutex<Option<AdvState>>>,
     beacon: NearbyBeacon,
@@ -468,6 +488,7 @@ async fn start_advertiser(
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 fn kursal_service() -> Service {
     Service {
         uuid: SERVICE_UUID,
@@ -485,6 +506,7 @@ fn kursal_service() -> Service {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn wait_powered(peripheral: &mut PeripheralAd) -> bool {
     for _ in 0..POWER_POLL_MAX_ATTEMPTS {
         match peripheral.is_powered().await {
@@ -501,6 +523,7 @@ async fn wait_powered(peripheral: &mut PeripheralAd) -> bool {
     false
 }
 
+#[cfg(not(target_os = "android"))]
 async fn run_peripheral_events(
     mut event_rx: mpsc::Receiver<PeripheralEvent>,
     my_beacon: Arc<Mutex<Option<NearbyBeacon>>>,
@@ -512,6 +535,7 @@ async fn run_peripheral_events(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn handle_peripheral_event(
     event: PeripheralEvent,
     my_beacon: &Arc<Mutex<Option<NearbyBeacon>>>,
@@ -562,6 +586,7 @@ async fn handle_peripheral_event(
     }
 }
 
+#[cfg(not(target_os = "android"))]
 async fn push_fragment(reassembly: &ReassemblyMap, client: &str, frame: &[u8]) -> Option<Vec<u8>> {
     if frame.len() < FRAG_HEADER_LEN {
         log::warn!("[bt] fragment shorter than header ({} bytes)", frame.len());

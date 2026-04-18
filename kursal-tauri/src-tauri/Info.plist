@@ -57,6 +57,6 @@
 	<true/>
 
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>The App uses Bluetooth to communicate with BLE devices</string>
+	<string>Kursal uses Bluetooth to discover nearby devices</string>
 </dict>
 </plist>

@@ -7,9 +7,18 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
-  import { UserPlus, Settings as SettingsIcon, Menu, X, MessageSquare, Search } from "lucide-svelte";
+  import {
+    UserPlus,
+    Settings as SettingsIcon,
+    Menu,
+    X,
+    MessageSquare,
+    Search,
+  } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
+  import { setBadgeCount } from "$lib/api/window";
+  import { uiState } from "$lib/state/ui.svelte";
 
   let { children } = $props();
 
@@ -20,12 +29,12 @@
   });
 
   function handleAddContact() {
-    mobileSidebarOpen = false;
+    uiState.mobileSidebarOpen = false;
     goto("/add-contact");
   }
 
   function handleSettings() {
-    mobileSidebarOpen = false;
+    uiState.mobileSidebarOpen = false;
     goto("/settings");
   }
 
@@ -34,15 +43,10 @@
   $effect(() => {
     const count = totalUnread;
     (async () => {
-      try {
-        await getCurrentWindow().setBadgeCount(count > 0 ? count : undefined);
-      } catch {
-        // ignored: unsupported platform or not in Tauri context
-      }
+      await setBadgeCount(count);
     })();
   });
 
-  let mobileSidebarOpen = $state(false);
   let search = $state("");
 
   onMount(() => {
@@ -83,7 +87,10 @@
       ? `📎 ${last.fileDetails.filename}`
       : last.content.replace(/\s+/g, " ").trim();
     const display = text.length > 44 ? text.slice(0, 41) + "..." : text;
-    return { text: (last.direction === "sent" ? "You: " : "") + display, ts: last.timestamp };
+    return {
+      text: (last.direction === "sent" ? "You: " : "") + display,
+      ts: last.timestamp,
+    };
   }
 
   function formatTimeShort(ts: number): string {
@@ -111,7 +118,9 @@
   const filteredContacts = $derived.by(() => {
     const q = search.trim().toLowerCase();
     if (!q) return contactsState.contacts;
-    return contactsState.contacts.filter(c => c.displayName.toLowerCase().includes(q));
+    return contactsState.contacts.filter((c) =>
+      c.displayName.toLowerCase().includes(q),
+    );
   });
 
   const sortedContacts = $derived.by(() => {
@@ -119,8 +128,12 @@
     list.sort((a, b) => {
       const aMsgs = messagesState.forContact(a.userId);
       const bMsgs = messagesState.forContact(b.userId);
-      const aTs = aMsgs.length ? aMsgs[aMsgs.length - 1].timestamp : a.createdAt * 1000;
-      const bTs = bMsgs.length ? bMsgs[bMsgs.length - 1].timestamp : b.createdAt * 1000;
+      const aTs = aMsgs.length
+        ? aMsgs[aMsgs.length - 1].timestamp
+        : a.createdAt * 1000;
+      const bTs = bMsgs.length
+        ? bMsgs[bMsgs.length - 1].timestamp
+        : b.createdAt * 1000;
       return bTs - aTs;
     });
     return list;
@@ -128,35 +141,57 @@
 </script>
 
 <div class="shell" class:chat-active={!!currentChatId}>
-  {#if mobileSidebarOpen}
+  {#if uiState.mobileSidebarOpen}
     <div
       class="backdrop"
-      onclick={() => (mobileSidebarOpen = false)}
+      onclick={() => (uiState.mobileSidebarOpen = false)}
       aria-hidden="true"
     ></div>
   {/if}
 
   <div class="mobile-bar" class:hidden={!!currentChatId} data-tauri-drag-region>
-    <button class="mobile-menu" onclick={() => (mobileSidebarOpen = true)} aria-label="Open menu">
+    <button
+      class="mobile-menu"
+      onclick={() => (uiState.mobileSidebarOpen = true)}
+      aria-label="Open menu"
+    >
       <Menu size={22} />
     </button>
     <span class="mobile-title">Kursal</span>
-    <button class="mobile-menu" onclick={handleAddContact} aria-label="Add contact">
+    <button
+      class="mobile-menu"
+      onclick={handleAddContact}
+      aria-label="Add contact"
+    >
       <UserPlus size={20} />
     </button>
   </div>
 
-  <aside class="sidebar" class:open={mobileSidebarOpen}>
+  <aside class="sidebar" class:open={uiState.mobileSidebarOpen}>
     <div class="sidebar-header" data-tauri-drag-region>
       <h1>Kursal</h1>
       <div class="header-actions">
-        <button class="icon-btn" onclick={handleAddContact} title="Add contact" aria-label="Add contact">
+        <button
+          class="icon-btn"
+          onclick={handleAddContact}
+          title="Add contact"
+          aria-label="Add contact"
+        >
           <UserPlus size={17} />
         </button>
-        <button class="icon-btn" onclick={handleSettings} title="Settings" aria-label="Settings">
+        <button
+          class="icon-btn"
+          onclick={handleSettings}
+          title="Settings"
+          aria-label="Settings"
+        >
           <SettingsIcon size={17} />
         </button>
-        <button class="icon-btn mobile-close" onclick={() => (mobileSidebarOpen = false)} aria-label="Close menu">
+        <button
+          class="icon-btn mobile-close"
+          onclick={() => (uiState.mobileSidebarOpen = false)}
+          aria-label="Close menu"
+        >
           <X size={18} />
         </button>
       </div>
@@ -173,7 +208,11 @@
         autocapitalize="off"
       />
       {#if search}
-        <button class="clear-search" onclick={() => (search = "")} aria-label="Clear search"><X size={12} /></button>
+        <button
+          class="clear-search"
+          onclick={() => (search = "")}
+          aria-label="Clear search"><X size={12} /></button
+        >
       {/if}
     </div>
 
@@ -199,24 +238,34 @@
             class="contact-row"
             class:active={currentChatId === contact.userId}
             class:unread={unread > 0}
-            onclick={() => { goto("/chat/" + contact.userId); mobileSidebarOpen = false; }}
+            onclick={() => {
+              goto("/chat/" + contact.userId);
+              uiState.mobileSidebarOpen = false;
+            }}
           >
             <div class="contact-avatar">
-              <Avatar name={contact.displayName} src={contact.avatarBase64} size={42} />
+              <Avatar
+                name={contact.displayName}
+                src={contact.avatarBase64}
+                size={42}
+              />
               <StatusDot status={status ?? "disconnected"} />
             </div>
             <div class="contact-meta">
               <div class="contact-top">
                 <span class="contact-name">{contact.displayName}</span>
                 {#if preview.ts}
-                  <span class="contact-time">{formatTimeShort(preview.ts)}</span>
+                  <span class="contact-time">{formatTimeShort(preview.ts)}</span
+                  >
                 {/if}
               </div>
               <div class="contact-bottom">
                 {#if preview.text}
                   <span class="contact-preview">{preview.text}</span>
                 {:else}
-                  <span class="contact-status-text">{getStatusLabel(status)}</span>
+                  <span class="contact-status-text"
+                    >{getStatusLabel(status)}</span
+                  >
                 {/if}
                 {#if unread > 0}
                   <span class="badge">{unread > 99 ? "99+" : unread}</span>
@@ -228,14 +277,27 @@
       {/if}
     </div>
 
-    <button class="user-panel" onclick={handleSettings} aria-label="Open settings">
-      <Avatar name={profileState.displayName} src={profileState.avatarBase64} size={36} />
+    <button
+      class="user-panel"
+      onclick={handleSettings}
+      aria-label="Open settings"
+    >
+      <Avatar
+        name={profileState.displayName}
+        src={profileState.avatarBase64}
+        size={36}
+      />
       <div class="user-info">
         <span class="user-name">{profileState.displayName}</span>
-        <span class="user-id">{profileState.peerId ? profileState.peerId.slice(0, 10) + "..." : "..."}</span>
+        <span class="user-id"
+          >{profileState.peerId
+            ? profileState.peerId.slice(0, 10) + "..."
+            : "..."}</span
+        >
       </div>
       {#if totalUnread > 0}
-        <span class="badge total">{totalUnread > 99 ? "99+" : totalUnread}</span>
+        <span class="badge total">{totalUnread > 99 ? "99+" : totalUnread}</span
+        >
       {/if}
     </button>
   </aside>
@@ -252,9 +314,15 @@
     overflow: hidden;
   }
 
-  .backdrop { display: none; }
-  .mobile-bar { display: none; }
-  .icon-btn.mobile-close { display: none; }
+  .backdrop {
+    display: none;
+  }
+  .mobile-bar {
+    display: none;
+  }
+  .icon-btn.mobile-close {
+    display: none;
+  }
 
   /* Sidebar */
   .sidebar {
@@ -295,18 +363,28 @@
   }
 
   .icon-btn {
-    width: 34px; height: 34px;
+    width: 34px;
+    height: 34px;
     border-radius: var(--radius-md);
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-secondary);
     transition: all var(--transition);
   }
-  .icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .icon-btn:active { transform: scale(0.95); }
+  .icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .icon-btn:active {
+    transform: scale(0.95);
+  }
 
   /* Search */
   .search-wrap {
-    display: flex; align-items: center; gap: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin: 8px 10px 4px;
     padding: 7px 10px;
     background: var(--bg-input);
@@ -315,7 +393,9 @@
     color: var(--text-muted);
     transition: border-color var(--transition);
   }
-  .search-wrap:focus-within { border-color: rgba(129, 140, 248, 0.45); }
+  .search-wrap:focus-within {
+    border-color: rgba(129, 140, 248, 0.45);
+  }
   .search-wrap input {
     flex: 1;
     background: transparent;
@@ -324,15 +404,22 @@
     color: var(--text-primary);
     font-size: 13px;
   }
-  .search-wrap input::placeholder { color: var(--text-muted); }
+  .search-wrap input::placeholder {
+    color: var(--text-muted);
+  }
   .clear-search {
-    width: 18px; height: 18px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(148, 163, 184, 0.2);
     color: var(--text-muted);
   }
-  .clear-search:hover { background: rgba(148, 163, 184, 0.35); }
+  .clear-search:hover {
+    background: rgba(148, 163, 184, 0.35);
+  }
 
   /* Contact list */
   .contacts-list {
@@ -342,7 +429,9 @@
   }
 
   .empty-state {
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
     padding: 24px 12px;
     color: var(--text-muted);
@@ -354,20 +443,26 @@
     text-align: center;
   }
   .empty-cta {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     margin-top: 8px;
     padding: 8px 14px;
     border-radius: 999px;
     background: var(--accent-dim);
     color: var(--accent-hover);
-    font-size: 12px; font-weight: 600;
+    font-size: 12px;
+    font-weight: 600;
     transition: background var(--transition);
   }
-  .empty-cta:hover { background: rgba(129, 140, 248, 0.22); }
+  .empty-cta:hover {
+    background: rgba(129, 140, 248, 0.22);
+  }
 
   .contact-row {
     width: 100%;
-    display: flex; align-items: center;
+    display: flex;
+    align-items: center;
     gap: 10px;
     padding: 9px 10px;
     border-radius: var(--radius-md);
@@ -375,8 +470,12 @@
     transition: background var(--transition);
     margin-bottom: 1px;
   }
-  .contact-row:hover { background: var(--bg-hover); }
-  .contact-row:active { background: rgba(99, 102, 241, 0.2); }
+  .contact-row:hover {
+    background: var(--bg-hover);
+  }
+  .contact-row:active {
+    background: rgba(99, 102, 241, 0.2);
+  }
   .contact-row.active {
     background: linear-gradient(90deg, var(--accent-solid), #4338ca);
     color: #fff;
@@ -389,64 +488,104 @@
     color: #fff;
   }
   .contact-row.active .contact-preview,
-  .contact-row.active .contact-status-text { opacity: 0.88; }
-  .contact-row.active .contact-time { opacity: 0.8; }
-  .contact-row.active .badge { background: #fff; color: var(--accent-solid); }
+  .contact-row.active .contact-status-text {
+    opacity: 0.88;
+  }
+  .contact-row.active .contact-time {
+    opacity: 0.8;
+  }
+  .contact-row.active .badge {
+    background: #fff;
+    color: var(--accent-solid);
+  }
 
-  .contact-avatar { position: relative; flex-shrink: 0; }
+  .contact-avatar {
+    position: relative;
+    flex-shrink: 0;
+  }
   .contact-avatar :global(.status-dot) {
     position: absolute;
-    bottom: -1px; right: -1px;
+    bottom: -1px;
+    right: -1px;
     border: 2px solid var(--bg-secondary);
   }
-  .contact-row.active .contact-avatar :global(.status-dot) { border-color: var(--accent-solid); }
+  .contact-row.active .contact-avatar :global(.status-dot) {
+    border-color: var(--accent-solid);
+  }
 
   .contact-meta {
-    flex: 1; min-width: 0;
-    display: flex; flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
     gap: 2px;
   }
   .contact-top {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
   .contact-name {
-    font-size: 14px; font-weight: 600;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--text-primary);
-    flex: 1; min-width: 0;
+    flex: 1;
+    min-width: 0;
   }
-  .contact-row.unread .contact-name { font-weight: 700; }
+  .contact-row.unread .contact-name {
+    font-weight: 700;
+  }
   .contact-time {
-    font-size: 11px; color: var(--text-muted);
+    font-size: 11px;
+    color: var(--text-muted);
     flex-shrink: 0;
   }
-  .contact-row.unread .contact-time { color: var(--accent); font-weight: 600; }
+  .contact-row.unread .contact-time {
+    color: var(--accent);
+    font-weight: 600;
+  }
 
   .contact-bottom {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
   .contact-preview,
   .contact-status-text {
-    font-size: 12.5px; color: var(--text-muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    flex: 1; min-width: 0;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
   }
-  .contact-row.unread .contact-preview { color: var(--text-secondary); }
+  .contact-row.unread .contact-preview {
+    color: var(--text-secondary);
+  }
 
   .badge {
     flex-shrink: 0;
-    min-width: 20px; height: 20px;
+    min-width: 20px;
+    height: 20px;
     padding: 0 6px;
     border-radius: 999px;
     background: var(--accent);
     color: #fff;
-    font-size: 11px; font-weight: 700;
-    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .badge.total {
-    min-width: 22px; height: 22px;
+    min-width: 22px;
+    height: 22px;
     font-size: 11px;
     margin-left: auto;
   }
@@ -458,22 +597,34 @@
     padding-left: 12px;
     padding-right: 12px;
     border-top: 1px solid var(--border);
-    display: flex; align-items: center;
+    display: flex;
+    align-items: center;
     gap: 10px;
     flex-shrink: 0;
     background: var(--bg-secondary);
     text-align: left;
     transition: background var(--transition);
   }
-  .user-panel:hover { background: var(--bg-hover); }
-  .user-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .user-panel:hover {
+    background: var(--bg-hover);
+  }
+  .user-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .user-name {
-    font-size: 13px; font-weight: 600;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--text-primary);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .user-id {
-    font-size: 11px; color: var(--text-muted);
+    font-size: 11px;
+    color: var(--text-muted);
     font-family: ui-monospace, SFMono-Regular, monospace;
   }
 
@@ -482,7 +633,8 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
-    display: flex; flex-direction: column;
+    display: flex;
+    flex-direction: column;
     background: var(--bg-primary);
   }
 
@@ -490,7 +642,9 @@
   @media (max-width: 768px) {
     .sidebar {
       position: fixed;
-      top: 0; left: 0; bottom: 0;
+      top: 0;
+      left: 0;
+      bottom: 0;
       width: 300px;
       max-width: 86vw;
       z-index: 60;
@@ -498,23 +652,35 @@
       transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
       box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45);
     }
-    .sidebar.open { transform: translateX(0); }
+    .sidebar.open {
+      transform: translateX(0);
+    }
 
     .backdrop {
       display: block;
-      position: fixed; inset: 0;
+      position: fixed;
+      inset: 0;
       background: rgba(0, 0, 0, 0.6);
       z-index: 50;
       animation: fadeIn 0.2s ease;
     }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
 
     .mobile-bar {
       display: flex;
       align-items: center;
       gap: 8px;
       position: fixed;
-      top: 0; left: 0; right: 0;
+      top: 0;
+      left: 0;
+      right: 0;
       height: var(--header-height);
       padding: 0 6px;
       background: rgba(17, 24, 39, 0.85);
@@ -523,31 +689,50 @@
       border-bottom: 1px solid var(--border);
       z-index: 30;
     }
-    .mobile-bar.hidden { display: none; }
+    .mobile-bar.hidden {
+      display: none;
+    }
     .mobile-menu {
-      width: 40px; height: 40px;
-      display: flex; align-items: center; justify-content: center;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: var(--text-primary);
       border-radius: var(--radius-md);
     }
-    .mobile-menu:active { background: var(--bg-hover); }
+    .mobile-menu:active {
+      background: var(--bg-hover);
+    }
     .mobile-title {
       flex: 1;
       text-align: center;
-      font-size: 16px; font-weight: 700;
+      font-size: 16px;
+      font-weight: 700;
     }
 
-    .icon-btn.mobile-close { display: flex; }
+    .icon-btn.mobile-close {
+      display: flex;
+    }
 
-    .content { width: 100%; }
-    .shell:not(.chat-active) .content { padding-top: var(--header-height); }
-    .shell.chat-active .sidebar { display: none; }
-
-    .contact-row { padding: 11px 10px; }
-    .icon-btn { width: 38px; height: 38px; }
+    .content {
+      width: 100%;
+    }
+    .shell:not(.chat-active) .content {
+      padding-top: var(--header-height);
+    }
+    .contact-row {
+      padding: 11px 10px;
+    }
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+    }
   }
 
   @media (max-width: 960px) and (min-width: 769px) {
-    .sidebar { width: 240px; }
+    .sidebar {
+      width: 240px;
+    }
   }
 </style>

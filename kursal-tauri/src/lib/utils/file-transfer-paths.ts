@@ -1,19 +1,12 @@
 import { appCacheDir, join } from "@tauri-apps/api/path";
 import { copyFile, readFile, remove, writeFile } from "@tauri-apps/plugin-fs";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { isMobile, OS } from "$lib/api/window";
 
 const deferredDownloadTargets = new Map<
   string,
   { targetUri: string; filename: string }
 >();
-
-function ua(): string {
-  if (typeof navigator === "undefined") return "";
-  return navigator.userAgent || "";
-}
-function isAndroid(): boolean { return /android/i.test(ua()); }
-function isIos(): boolean { return /iphone|ipad|ipod/i.test(ua()); }
-function isMobile(): boolean { return isAndroid() || isIos(); }
 
 function isUriPath(path: string): boolean {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(path);
@@ -59,7 +52,9 @@ async function writeBytesToAppCache(
 ): Promise<string> {
   const cacheDir = await appCacheDir();
   const timestamp = Date.now();
-  const random = Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, "0");
+  const random = Math.floor(Math.random() * 1_000_000_000)
+    .toString()
+    .padStart(9, "0");
   const tempName = `${prefix}-${timestamp}-${random}-${sanitizeFilename(suggestedFilename)}`;
   const tempPath = await join(cacheDir, tempName);
   await writeFile(tempPath, bytes);
@@ -83,8 +78,9 @@ export interface PreparedFile {
   filename: string;
 }
 
-export async function pickFileForSend(suggestedName?: string): Promise<PreparedFile | null> {
-  const mobile = isMobile();
+export async function pickFileForSend(
+  suggestedName?: string,
+): Promise<PreparedFile | null> {
   try {
     const selected = await open({
       multiple: false,
@@ -98,7 +94,7 @@ export async function pickFileForSend(suggestedName?: string): Promise<PreparedF
     return await prepareOfferSourcePath(raw);
   } catch (e) {
     // Android: some builds reject unknown options — retry without them.
-    if (mobile) {
+    if (isMobile) {
       const selected = await open({ multiple: false, directory: false });
       const raw = extractPath(selected);
       if (!raw) return null;
@@ -113,12 +109,18 @@ export interface ResolvedReceivePath {
   deferredTargetUri: string | null;
 }
 
-export async function pickFileForReceive(filename: string): Promise<ResolvedReceivePath | null> {
-  if (isAndroid()) {
+export async function pickFileForReceive(
+  filename: string,
+): Promise<ResolvedReceivePath | null> {
+  if (OS == "android") {
     // Android SAF: we can't always use save() reliably. Write to app cache, then
     // let the user share out once done (via platform-level share) — see notes below.
     // For now, write directly to app cache; backend fills in.
-    const backendPath = await writeBytesToAppCache(new Uint8Array(0), filename, "recv");
+    const backendPath = await writeBytesToAppCache(
+      new Uint8Array(0),
+      filename,
+      "recv",
+    );
     return { backendPath, deferredTargetUri: null };
   }
 
@@ -128,7 +130,9 @@ export async function pickFileForReceive(filename: string): Promise<ResolvedRece
   return await resolveReceiveSavePath(raw, filename);
 }
 
-export async function prepareOfferSourcePath(rawSelection: string): Promise<PreparedFile> {
+export async function prepareOfferSourcePath(
+  rawSelection: string,
+): Promise<PreparedFile> {
   const filename = filenameFromPath(rawSelection);
 
   if (rawSelection.startsWith("file://")) {
@@ -149,11 +153,18 @@ export async function resolveReceiveSavePath(
   defaultFilename: string,
 ): Promise<ResolvedReceivePath> {
   if (rawSelection.startsWith("file://")) {
-    return { backendPath: pathFromFileUri(rawSelection), deferredTargetUri: null };
+    return {
+      backendPath: pathFromFileUri(rawSelection),
+      deferredTargetUri: null,
+    };
   }
 
   if (rawSelection.startsWith("content://")) {
-    const backendPath = await writeBytesToAppCache(new Uint8Array(0), defaultFilename, "recv");
+    const backendPath = await writeBytesToAppCache(
+      new Uint8Array(0),
+      defaultFilename,
+      "recv",
+    );
     return { backendPath, deferredTargetUri: rawSelection };
   }
 
@@ -189,6 +200,8 @@ export async function finalizeDeferredReceiveTarget(savePath: string): Promise<{
     return { filename: deferred.filename, moved: true };
   } catch {
     deferredDownloadTargets.delete(savePath);
-    throw new Error("Could not finalize downloaded file to selected destination");
+    throw new Error(
+      "Could not finalize downloaded file to selected destination",
+    );
   }
 }

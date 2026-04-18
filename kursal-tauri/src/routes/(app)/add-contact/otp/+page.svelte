@@ -15,10 +15,7 @@
     ClipboardPaste,
     ScanLine,
   } from "lucide-svelte";
-
-  // Mobile detection for QR scanner button (barcode-scanner plugin is mobile-only)
-  const isMobile =
-    browser && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  import { isMobile } from "$lib/api/window";
 
   let mode = $state<"share" | "receive">("share");
   let shareView = $state<"words" | "qr">("words");

@@ -546,9 +546,18 @@
     });
   });
 
+  const MAX_MESSAGE_LENGTH = 10000;
+
   async function handleSend() {
     const text = inputText.trim();
     if (!text) return;
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      notifications.push(
+        `Message too long (${text.length}/${MAX_MESSAGE_LENGTH})`,
+        "error",
+      );
+      return;
+    }
 
     if (editingMessageId) {
       if (!contactId) return;
@@ -777,6 +786,8 @@
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   function onBubbleTouchStartLongPress(msgId: string) {
     if (!isCoarsePointer) return;
+    const m = messageIndex.get(msgId);
+    if (m && (m.status === "sending" || m.status === "failed")) return;
     if (longPressTimer) clearTimeout(longPressTimer);
     longPressTimer = setTimeout(() => {
       actionSheetMsgId = msgId;
@@ -1341,7 +1352,7 @@
 
   @media (max-width: 768px) {
     .messages {
-      padding: 12px 10px 4px;
+      padding: 12px 10px 48px;
     }
     .group-messages {
       max-width: 82%;

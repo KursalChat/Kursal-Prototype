@@ -43,6 +43,7 @@
     composerEl = $bindable(null),
   }: Props = $props();
 
+  const MAX_MESSAGE_LENGTH = 10000;
   let showEmoji = $state(false);
 
   function handleKeydown(e: KeyboardEvent) {
@@ -103,6 +104,7 @@
           class="ctx-cancel"
           onclick={onCancelReply}
           aria-label="Cancel reply"
+          disabled={sending}
         >
           <X size={14} />
         </button>
@@ -118,6 +120,7 @@
           class="ctx-cancel"
           onclick={onCancelEdit}
           aria-label="Cancel edit"
+          disabled={sending}
         >
           <X size={14} />
         </button>
@@ -141,6 +144,7 @@
           title="Emoji"
           aria-label="Emoji"
           onclick={() => (showEmoji = !showEmoji)}
+          disabled={sending}
         >
           <Smile size={20} />
         </button>
@@ -161,6 +165,7 @@
         onkeydown={handleKeydown}
         placeholder={`Message ${contact.displayName}`}
         rows="1"
+        maxlength={MAX_MESSAGE_LENGTH}
         disabled={sending}
       ></textarea>
 
@@ -196,11 +201,12 @@
     left: 0;
     right: 0;
     bottom: 100%;
-    height: 48px;
+    height: 8px;
     background: linear-gradient(
       to top,
-      rgba(17, 24, 39, 0.85),
-      rgba(17, 24, 39, 0)
+      rgba(17, 24, 39, 0.92) 0%,
+      rgba(17, 24, 39, 0.55) 50%,
+      rgba(17, 24, 39, 0) 100%
     );
     pointer-events: none;
     z-index: 1;

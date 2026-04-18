@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
-  import { ArrowLeft, ShieldAlert } from "lucide-svelte";
+  import { Menu, ShieldAlert } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
   import { contactsState } from "$lib/state/contacts.svelte";
+  import { uiState } from "$lib/state/ui.svelte";
   import { getStatusLabel } from "./chat-utils";
   import type { ContactResponse } from "$lib/types";
 
@@ -18,8 +18,12 @@
 
 <header class="chat-header" data-tauri-drag-region>
   <div class="header-left">
-    <button class="back-btn" onclick={() => goto("/chat")} aria-label="Back">
-      <ArrowLeft size={20} />
+    <button
+      class="menu-btn"
+      onclick={() => (uiState.mobileSidebarOpen = true)}
+      aria-label="Open sidebar"
+    >
+      <Menu size={20} />
     </button>
     <button
       class="header-profile"
@@ -77,7 +81,7 @@
     gap: 6px;
     min-width: 0;
   }
-  .back-btn {
+  .menu-btn {
     display: none;
     width: 36px;
     height: 36px;
@@ -88,16 +92,16 @@
     transition: background var(--transition);
     -webkit-app-region: no-drag;
   }
-  .back-btn:hover {
+  .menu-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
   }
-  .back-btn:active {
+  .menu-btn:active {
     background: var(--bg-hover);
     transform: scale(0.96);
   }
   @media (max-width: 768px) {
-    .back-btn {
+    .menu-btn {
       display: flex;
     }
   }
