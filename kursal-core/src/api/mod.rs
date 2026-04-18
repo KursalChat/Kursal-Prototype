@@ -7,6 +7,7 @@ use crate::{
 use libsignal_protocol::{DeviceId, ProtocolAddress};
 use tokio::sync::oneshot;
 
+pub mod cmd_wrapper;
 pub mod file_transfers;
 pub mod handle_core_command;
 pub mod handle_incoming;
@@ -29,6 +30,9 @@ pub enum AppEvent {
     MessageReceived {
         contact_id: UserId,
         message: StoredMessage,
+    },
+    TypingIndicator {
+        contact_id: UserId,
     },
     DeliveryConfirmed {
         contact_id: UserId,
@@ -113,6 +117,7 @@ pub enum CoreCommand {
     ConnectNearby {
         peer_id: String,
         session_name: String,
+        method: String,
         reply: oneshot::Sender<Result<()>>,
     },
     SendText {
@@ -120,6 +125,10 @@ pub enum CoreCommand {
         text: String,
         reply_to: Option<MessageId>,
         reply: oneshot::Sender<Result<MessageId>>,
+    },
+    SendTypingIndicator {
+        contact_id: String,
+        reply: oneshot::Sender<Result<()>>,
     },
     RotatePeerId {
         reply: oneshot::Sender<Result<()>>,

@@ -21,8 +21,15 @@ pub enum KursalError {
 pub trait MapKursalResult<T> {
     fn ok_kursal(self, variant: impl Fn(String) -> KursalError) -> Result<T>;
 }
+
 impl<T, E: std::fmt::Display> MapKursalResult<T> for std::result::Result<T, E> {
     fn ok_kursal(self, variant: impl Fn(String) -> KursalError) -> Result<T> {
         self.map_err(|e| variant(e.to_string()))
+    }
+}
+
+impl Into<String> for KursalError {
+    fn into(self) -> String {
+        self.to_string()
     }
 }

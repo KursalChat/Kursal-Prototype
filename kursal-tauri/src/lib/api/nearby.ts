@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { NearbyPeerResponse } from '$lib/types';
+import type { NearbyOrigin, NearbyPeerResponse } from '$lib/types';
 
 // Returns the session name string (e.g. "Purple Raccoon")
 export const startNearby = (): Promise<string> =>
@@ -11,8 +11,12 @@ export const stopNearby = (): Promise<void> =>
 export const getNearbyPeers = (): Promise<NearbyPeerResponse[]> =>
   invoke('get_nearby_peers');
 
-export const connectNearby = (peerId: string): Promise<void> =>
-  invoke('connect_nearby', { peerId });
+export function originToMethod(origin: NearbyOrigin): 'mdns' | 'bt' {
+  return origin === 'Bluetooth' ? 'bt' : 'mdns';
+}
+
+export const connectNearby = (peerId: string, origin: NearbyOrigin): Promise<void> =>
+  invoke('connect_nearby', { peerId, method: originToMethod(origin) });
 
 export const acceptNearby = (peerId: string): Promise<void> =>
   invoke('accept_nearby', { peerId });

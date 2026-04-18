@@ -1,21 +1,21 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
 
-  let startupError = '';
+  let startupError = "";
 
   onMount(() => {
     try {
-      const onboarded = localStorage.getItem('kursal_onboarded');
-      const target = onboarded ? '/chat' : '/onboarding';
+      const onboarded = localStorage.getItem("kursal_onboarded");
+      const target = onboarded == "done" ? "/chat" : "/onboarding";
 
       void goto(target, { replaceState: true }).catch((err) => {
-        console.error('initial goto failed', err);
+        console.error("initial goto failed", err);
         window.location.replace(target);
       });
     } catch (err) {
       startupError = `Failed to initialize app route: ${String(err)}`;
-      console.error('startup route init failed', err);
+      console.error("startup route init failed", err);
     }
   });
 </script>

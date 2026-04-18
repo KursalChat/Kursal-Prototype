@@ -7,7 +7,18 @@
   import { notifications } from "$lib/state/notifications.svelte";
   import Button from "$lib/components/Button.svelte";
   import QRCode from "qrcode";
-  import { Copy, QrCode, Type, RefreshCw, ClipboardPaste } from "lucide-svelte";
+  import {
+    Copy,
+    QrCode,
+    Type,
+    RefreshCw,
+    ClipboardPaste,
+    ScanLine,
+  } from "lucide-svelte";
+
+  // Mobile detection for QR scanner button (barcode-scanner plugin is mobile-only)
+  const isMobile =
+    browser && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   let mode = $state<"share" | "receive">("share");
   let shareView = $state<"words" | "qr">("words");
@@ -160,6 +171,40 @@
     }
   }
 
+  // Barcode-scanner plugin is mobile-only (iOS/Android). Guard at call site
+  // so the dynamic import never runs on desktop, where the plugin is not
+  // registered and would throw at invoke time.
+  async function scanQr() {
+    if (!isMobile) return;
+    try {
+      const { scan, Format, checkPermissions, requestPermissions } =
+        await import("@tauri-apps/plugin-barcode-scanner");
+      const initialPerm = (await checkPermissions()) as string;
+      const perm =
+        initialPerm === "granted"
+          ? initialPerm
+          : ((await requestPermissions()) as string);
+      if (perm !== "granted") {
+        notifications.push("Camera permission denied", "error");
+        return;
+      }
+      const result = await scan({
+        windowed: false,
+        formats: [Format.QRCode],
+        cameraDirection: "back",
+      });
+      if (result?.content) {
+        inputOtp = result.content.trim();
+      }
+    } catch (e) {
+      const msg = String(e);
+      if (!msg.toLowerCase().includes("cancel")) {
+        notifications.push("QR scan failed", "error");
+        console.error("QR scan failed:", e);
+      }
+    }
+  }
+
   onMount(() => {
     if (browser) {
       const raw = sessionStorage.getItem(storageKey);
@@ -219,7 +264,7 @@
         <div>
           <h3>Share code</h3>
           <p class="subtle">
-            This code expires automatically after 10 minutes.
+            This one-time code expires automatically after 10 minutes.
           </p>
         </div>
 
@@ -230,8 +275,7 @@
 
       {#if otp && status === "waiting"}
         <p class="explanation">
-          This code expires automatically after 10 minutes. Send this to your
-          contact through a secure channel.
+          Send this to your contact through a secure channel.
         </p>
 
         <div class="sub-toggle" role="tablist" aria-label="OTP share view">
@@ -295,8 +339,8 @@
         </div>
       {:else}
         <p class="explanation">
-          Generate a short-lived 8-word phrase and share it with someone you
-          trust.
+          Recommended method for adding a contact. If you are on the same
+          network on in Bluetooth-range, consider using the <b>Nearby</b> tab.
         </p>
         <Button
           variant="primary"
@@ -321,18 +365,35 @@
 
       <div class="input-wrap">
         <textarea
-          value={inputOtp}
-          onchange={(e) => (inputOtp = (e.target as HTMLTextAreaElement).value)}
+          bind:value={inputOtp}
           placeholder="example: maple echo ribbon solar ..."
           rows="3"
           disabled={fetchStatus === "loading"}
           autocapitalize="off"
           spellcheck="false"
         ></textarea>
-        <button class="paste-button" type="button" onclick={pasteCode}>
-          <ClipboardPaste size={14} />
-          Paste
-        </button>
+        <div class="input-actions">
+          {#if isMobile}
+            <button
+              class="inline-action"
+              type="button"
+              onclick={scanQr}
+              title="Scan QR code"
+            >
+              <ScanLine size={14} />
+              Scan
+            </button>
+          {/if}
+          <button
+            class="inline-action"
+            type="button"
+            onclick={pasteCode}
+            title="Paste"
+          >
+            <ClipboardPaste size={14} />
+            Paste
+          </button>
+        </div>
       </div>
 
       {#if fetchError}
@@ -559,10 +620,15 @@
     opacity: 0.5;
   }
 
-  .paste-button {
+  .input-actions {
     position: absolute;
     right: 10px;
     top: 10px;
+    display: flex;
+    gap: 6px;
+  }
+
+  .inline-action {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -577,7 +643,7 @@
     transition: all var(--transition);
   }
 
-  .paste-button:hover {
+  .inline-action:hover {
     border-color: rgba(148, 163, 184, 0.42);
     color: var(--text-primary);
   }

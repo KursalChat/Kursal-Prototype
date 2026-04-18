@@ -6,150 +6,104 @@
   const methods = [
     { label: "One-Time Code", href: "/add-contact/otp", icon: QrCode },
     { label: "Contact File", href: "/add-contact/ltc", icon: FileArchive },
-    { label: "Nearby Devices", href: "/add-contact/nearby", icon: Radar },
+    { label: "Nearby", href: "/add-contact/nearby", icon: Radar },
   ];
 
   let { children } = $props();
 </script>
 
-<div class="container">
-  <div class="page-header">
-    <div class="header-copy">
-      <h1>Add Contact</h1>
-      <p class="subtitle">Choose OTP, a contact file, or nearby pairing.</p>
-    </div>
-  </div>
+<div class="add-contact">
+  <header class="ac-header">
+    <h2>Add Contact</h2>
+  </header>
 
-  <nav class="tab-bar" aria-label="Add contact methods">
-    {#each methods as method}
+  <nav class="tabs">
+    {#each methods as m}
       <button
-        type="button"
         class="tab"
-        class:active={page.url.pathname.startsWith(method.href)}
-        aria-current={page.url.pathname.startsWith(method.href)
-          ? "page"
-          : undefined}
-        onclick={() => goto(method.href)}
+        data-active={page.url.pathname.startsWith(m.href)}
+        onclick={() => goto(m.href)}
       >
-        <method.icon size={16} strokeWidth={2.2} />
-        <span class="tab-label">{method.label}</span>
+        <m.icon size={15} />
+        <span class="tab-text">{m.label}</span>
       </button>
     {/each}
   </nav>
 
-  <div class="content">
+  <div class="ac-body">
     {@render children()}
   </div>
 </div>
 
 <style>
-  .container {
+  .add-contact {
     height: 100%;
     display: flex;
     flex-direction: column;
     min-height: 0;
   }
 
-  .page-header {
-    padding: 18px;
+  .ac-header {
+    height: var(--header-height);
+    padding: 0 16px;
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border);
-    background: rgba(15, 23, 42, 0.56);
-    backdrop-filter: blur(18px);
+    background: var(--bg-secondary);
     flex-shrink: 0;
   }
 
-  .header-copy {
-    display: grid;
-    gap: 2px;
-  }
-
-  .page-header h1 {
+  .ac-header h2 {
     margin: 0;
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
   }
 
-  .subtitle {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 13px;
-    line-height: 1.45;
-  }
-
-  .tab-bar {
+  .tabs {
     display: flex;
-    gap: 8px;
-    padding: 12px 18px;
+    gap: 4px;
+    padding: 8px 16px;
     border-bottom: 1px solid var(--border);
-    background: rgba(11, 17, 32, 0.48);
-    overflow-x: auto;
+    background: var(--bg-secondary);
     flex-shrink: 0;
+    overflow-x: auto;
   }
 
   .tab {
-    background: rgba(15, 23, 42, 0.4);
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    color: var(--text-secondary);
-    padding: 10px 13px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: 10px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    white-space: nowrap;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
     transition: all var(--transition);
+    white-space: nowrap;
+    border: 1px solid transparent;
   }
 
   .tab:hover {
-    background: rgba(30, 41, 59, 0.72);
-    border-color: rgba(148, 163, 184, 0.42);
+    background: var(--bg-hover);
     color: var(--text-primary);
   }
 
-  .tab.active {
-    background: rgba(51, 65, 85, 0.9);
-    border-color: rgba(129, 140, 248, 0.5);
-    color: var(--text-primary);
+  .tab[data-active="true"],
+  .tab[data-active="true"]:hover {
+    background: var(--accent-selected);
+    color: #fff;
+    border-color: rgba(165, 180, 252, 0.7);
   }
 
-  .content {
+  .ac-body {
     flex: 1;
     overflow-y: auto;
-    padding: 20px 18px;
+    padding: 20px 16px;
   }
 
-  @media (max-width: 900px) {
-    .page-header {
-      padding: 14px;
-    }
-
-    .page-header h1 {
-      font-size: 20px;
-    }
-
-    .subtitle {
-      font-size: 12px;
-    }
-
-    .tab-bar {
-      padding: 10px 14px;
-      gap: 8px;
-    }
-
-    .tab-label {
-      display: none;
-    }
-
-    .tab {
-      padding: 9px 11px;
-    }
-
-    .content {
-      padding: 14px;
-    }
+  @media (max-width: 768px) {
+    .tabs { padding: 8px 12px; }
+    .tab-text { display: none; }
+    .ac-body { padding: 16px 12px; }
   }
 </style>

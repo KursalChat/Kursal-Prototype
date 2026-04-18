@@ -19,7 +19,7 @@ use crate::{
         messages::message_receive,
         stream::stream_decrypt,
     },
-    first_contact::{WireMessage, otp::handle_otp_response},
+    first_contact::{WireMessage, handle_fc_response},
     messaging::{
         StoredMessage, StoredReaction,
         enums::{DeliveryReceipt, Direction, KursalMessage, MessageId, MessageStatus},
@@ -39,7 +39,7 @@ pub async fn handle_incoming(
 
     let encrypted_payload = match bincode::deserialize::<WireMessage>(&ciphertext) {
         Ok(WireMessage::ContactResponse(response)) => {
-            let _ = handle_otp_response(response, db.clone(), cmd_tx, event_tx).await;
+            let _ = handle_fc_response(response, db.clone(), cmd_tx, event_tx).await;
             return Ok(());
         }
         Ok(WireMessage::KeyRotationAnnouncement(rotation)) => {
@@ -214,6 +214,17 @@ pub async fn handle_incoming(
     let kmessage = KursalMessage::deserialize(&received)?;
 
     match kmessage {
+        KursalMessage::Typing => {
+            event_tx
+                .send(AppEvent::TypingIndicator {
+                    contact_id: contact.user_id,
+                })
+                .await
+                .map_err(|err| KursalError::Network(err.to_string()))?;
+
+            return Ok(());
+        }
+
         KursalMessage::MessageEdit(ref edit) => {
             let mut message = StoredMessage::load(
                 &*db.clone().0.lock().await,

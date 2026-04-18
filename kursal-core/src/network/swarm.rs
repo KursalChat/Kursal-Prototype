@@ -17,9 +17,12 @@ use libp2p::{
     request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, SwarmEvent, behaviour::toggle::Toggle},
 };
-use std::collections::{HashMap, HashSet};
 use std::io;
 use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    net::IpAddr,
+};
 use tokio::sync::{mpsc, oneshot};
 
 pub const STREAM_PROTOCOL: StreamProtocol = StreamProtocol::new("/kursal/transfer/1.0.0");
@@ -47,8 +50,8 @@ pub enum SwarmCommand {
         reply_tx: mpsc::Sender<Vec<u8>>,
     },
     Shutdown,
-    EnableMdns,
-    DisableMdns,
+    EnableNearby,
+    DisableNearby,
     ContactAdded {
         contact: Contact,
     },
@@ -155,8 +158,8 @@ impl SwarmHandle {
                 );
 
                 let mdns = libp2p::mdns::tokio::Behaviour::new(mdns::Config {
-                    query_interval: Duration::from_secs(20),
-                    ttl: Duration::from_secs(90),
+                    query_interval: Duration::from_secs(60),
+                    ttl: Duration::from_secs(2 * 60),
                     enable_ipv6: false,
                 }, local_peer_id)?;
 
@@ -226,8 +229,8 @@ impl SwarmHandle {
             let mut pending_queries: HashMap<libp2p::kad::QueryId, mpsc::Sender<Vec<u8>>> =
                 HashMap::new();
             let mut listen_addresses: HashSet<Multiaddr> = HashSet::new();
-            let mut mdns_enabled = false;
-            let mut mdns_peer_buffer: Vec<(PeerId, Multiaddr)> = Vec::new();
+            let mut nearby_enabled = false;
+            let mut mdns_peers: HashMap<PeerId, Multiaddr> = HashMap::new();
 
             let mut stream_control = swarm.behaviour().streaming.new_control();
             let mut peer_streams: HashMap<PeerId, mpsc::Sender<Vec<u8>>> = HashMap::new();
@@ -250,19 +253,19 @@ impl SwarmHandle {
 
             loop {
                 tokio::select! {
-                    event = swarm.select_next_some() => handle_swarm_event(event, &event_tx, &mut pending_queries, &mut listen_addresses, &mut swarm, mdns_enabled, &mut mdns_peer_buffer).await,
+                    event = swarm.select_next_some() => handle_swarm_event(event, &event_tx, &mut pending_queries, &mut listen_addresses, &mut swarm, nearby_enabled, &mut mdns_peers).await,
                     cmd = cmd_rx.recv() => {
                         match cmd {
                             Some(SwarmCommand::Shutdown) => break,
-                            Some(SwarmCommand::EnableMdns) => {
-                                mdns_enabled = true;
-                                for (peer_id, addr) in mdns_peer_buffer.drain(..) {
-                                    let _ = event_tx.send(NetworkEvent::PeerDiscovered { peer_id, addresses: vec![addr] }).await;
+                            Some(SwarmCommand::EnableNearby) => {
+                                nearby_enabled = true;
+                                for (peer_id, addr) in mdns_peers.iter() {
+                                    let _ = event_tx.send(NetworkEvent::PeerDiscovered { peer_id: *peer_id, addresses: vec![addr.clone()] }).await;
                                 }
 
-                                log::info!("mDNS enabled");
+                                log::info!("Nearby enabled ({} known mdns peers)", mdns_peers.len());
                             },
-                            Some(cmd) => handle_swarm_command(cmd, &mut swarm, &mut pending_queries, &mut listen_addresses, &mut mdns_enabled, &mut stream_control, &mut peer_streams).await,
+                            Some(cmd) => handle_swarm_command(cmd, &mut swarm, &mut pending_queries, &mut listen_addresses, &mut nearby_enabled, &mut stream_control, &mut peer_streams).await,
                             None => break
                         }
                     }
@@ -284,8 +287,8 @@ async fn handle_swarm_event(
     pending_queries: &mut HashMap<libp2p::kad::QueryId, mpsc::Sender<Vec<u8>>>,
     listen_addresses: &mut HashSet<Multiaddr>,
     swarm: &mut Swarm<KursalBehaviour>,
-    mdns_enabled: bool,
-    mdns_peer_buffer: &mut Vec<(PeerId, Multiaddr)>,
+    nearby_enabled: bool,
+    mdns_peers: &mut HashMap<PeerId, Multiaddr>,
 ) {
     match event {
         SwarmEvent::Behaviour(KursalBehaviourEvent::Kad(
@@ -332,6 +335,11 @@ async fn handle_swarm_event(
             );
 
             for addr in info.listen_addrs {
+                if !is_routable_multiaddr(&addr) {
+                    log::trace!("[identify] skip unroutable {addr} from {peer_id}");
+                    continue;
+                }
+
                 swarm.behaviour_mut().kad.add_address(&peer_id, addr);
             }
         }
@@ -339,23 +347,28 @@ async fn handle_swarm_event(
             peers,
         ))) => {
             log::info!(
-                "[mDNS] raw Discovered event, mdns_enabled={}, peers={}",
-                mdns_enabled,
+                "[mDNS] raw Discovered event, nearby_enabled={}, peers={}",
+                nearby_enabled,
                 peers.len()
             );
 
             for (peer_id, addr) in peers {
+                if !is_routable_multiaddr(&addr) {
+                    log::trace!("[mDNS] skip unroutable {addr} from {peer_id}");
+                    continue;
+                }
+
                 log::info!("[mDNS] discovered peer {} at {}", peer_id, addr);
 
-                if mdns_enabled {
+                mdns_peers.insert(peer_id, addr.clone());
+
+                if nearby_enabled {
                     let _ = event_tx
                         .send(NetworkEvent::PeerDiscovered {
                             peer_id,
                             addresses: vec![addr],
                         })
                         .await;
-                } else {
-                    mdns_peer_buffer.push((peer_id, addr));
                 }
             }
         }
@@ -532,18 +545,18 @@ async fn handle_swarm_command(
     swarm: &mut Swarm<KursalBehaviour>,
     pending_queries: &mut HashMap<libp2p::kad::QueryId, mpsc::Sender<Vec<u8>>>,
     listen_addresses: &mut HashSet<Multiaddr>,
-    mdns_enabled: &mut bool,
+    nearby_enabled: &mut bool,
     stream_control: &mut libp2p_stream::Control,
     peer_streams: &mut HashMap<PeerId, mpsc::Sender<Vec<u8>>>,
 ) {
     match cmd {
-        SwarmCommand::Shutdown | SwarmCommand::EnableMdns => {} // handled in the loop itself
+        SwarmCommand::Shutdown | SwarmCommand::EnableNearby => {} // handled in the loop itself
         SwarmCommand::Dial(addr) => {
             let _ = swarm.dial(addr);
         }
-        SwarmCommand::DisableMdns => {
-            *mdns_enabled = false;
-            log::info!("mDNS disabled");
+        SwarmCommand::DisableNearby => {
+            *nearby_enabled = false;
+            log::info!("Nearby disabled");
         }
         SwarmCommand::PublishDht { key, value } => {
             log::info!("[kad] Putting record into DHT...");
@@ -869,4 +882,25 @@ pub async fn open_peer_stream(
 
     peer_streams.insert(peer_id, tx.clone());
     Some(tx)
+}
+
+pub fn is_routable_multiaddr(addr: &Multiaddr) -> bool {
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip) => {
+                if ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() {
+                    return false;
+                }
+            }
+            Protocol::Ip6(ip) => {
+                let is_link_local = (ip.segments()[0] & 0xffc0) == 0xfe80;
+                if ip.is_loopback() || ip.is_unspecified() || is_link_local {
+                    return false;
+                }
+                let _ = IpAddr::V6(ip);
+            }
+            _ => {}
+        }
+    }
+    true
 }

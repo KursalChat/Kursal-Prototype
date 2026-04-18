@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS Info.plist fragment — merged with the Tauri-generated bundle Info.plist.
+  Tauri auto-detects a file named `Info.plist` next to tauri.conf.json.
+
+  These keys ensure the OS-level permission prompts show the correct messages
+  (Ventura+ will refuse to even show the prompt without these), and that mDNS
+  nearby discovery works through macOS Private Network Privacy (14.0+).
+-->
+<plist version="1.0">
+<dict>
+	<!-- Nearby peer discovery (libp2p mDNS + local dev server) -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Kursal uses your local network to discover nearby peers for direct, encrypted peer-to-peer messaging.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_p2p._udp</string>
+		<string>_p2p._tcp</string>
+	</array>
+
+	<!-- Camera access for QR-code / barcode-based contact exchange -->
+	<key>NSCameraUsageDescription</key>
+	<string>Kursal uses the camera to scan QR codes when adding a new contact.</string>
+
+	<!-- Profile avatar picker -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kursal needs access to your photos so you can pick a profile picture.</string>
+
+	<!-- File transfer (the plugin-fs dialogs + send/receive) -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Kursal reads files you pick so you can send them, and writes files you receive.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Kursal saves received files to your Downloads folder.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Kursal saves received files to your Desktop when you choose it.</string>
+
+	<!-- Future voice calls — harmless to pre-declare so upgrade doesn't require resubmission -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kursal uses the microphone only during voice calls with your contacts.</string>
+
+	<!-- High-contrast dark UI on notch systems -->
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+
+	<!-- App Transport Security: allow IPC webview on localhost -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+
+	<!-- Export compliance: Kursal uses end-to-end encryption. Set to true; you
+	     provide an export compliance code in App Store Connect. For non-MAS
+	     distribution this key is advisory. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
+
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>The App uses Bluetooth to communicate with BLE devices</string>
+</dict>
+</plist>

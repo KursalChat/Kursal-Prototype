@@ -1,7 +1,7 @@
 use crate::{
     first_contact::nearby::{
-        MdnsTransport, NearbyBeacon, NearbyMessage, NearbyPacket, NearbyRouteResult,
-        NearbyTransport, handle_nearby_request,
+        NearbyBeacon, NearbyMessage, NearbyPacket, NearbyTransport, handle_nearby_request,
+        mdns::MdnsTransport,
     },
     network::swarm::SwarmCommand,
     storage::{Database, SharedDatabase},
@@ -43,10 +43,6 @@ impl NearbyTransport for MockNearbyTransport {
 
     async fn unregister_handshake(&self, peer_id: &str) {
         self.pending.lock().await.remove(peer_id);
-    }
-
-    async fn nearby_peers_snapshot(&self) -> Vec<(String, NearbyBeacon)> {
-        Vec::new()
     }
 }
 
@@ -91,7 +87,8 @@ async fn nearby_packet_roundtrip_beacon_and_message() {
 #[tokio::test]
 async fn mdns_send_wraps_message_in_nearby_packet() {
     let (cmd_tx, mut cmd_rx) = mpsc::channel(8);
-    let transport = MdnsTransport::new(cmd_tx);
+    let my_beacon = Arc::new(Mutex::new(None));
+    let transport = MdnsTransport::new(cmd_tx, my_beacon);
 
     transport
         .send(
@@ -110,55 +107,6 @@ async fn mdns_send_wraps_message_in_nearby_packet() {
         NearbyPacket::Message(NearbyMessage::ConnectDecline) => {}
         _ => panic!("expected wrapped ConnectDecline packet"),
     }
-}
-
-#[tokio::test]
-async fn mdns_on_message_received_routes_connect_request_as_incoming() {
-    let (cmd_tx, _cmd_rx) = mpsc::channel(8);
-    let transport = MdnsTransport::new(cmd_tx);
-
-    let data = NearbyPacket::Message(NearbyMessage::ConnectRequest {
-        from_session_name: "Green Wolf".to_string(),
-    })
-    .serialize()
-    .unwrap();
-
-    let route = transport
-        .on_message_received("peer-x".to_string(), data)
-        .await;
-
-    match route {
-        NearbyRouteResult::IncomingRequest {
-            peer_id,
-            session_name,
-        } => {
-            assert_eq!(peer_id, "peer-x");
-            assert_eq!(session_name, "Green Wolf");
-        }
-        _ => panic!("expected incoming request route"),
-    }
-}
-
-#[tokio::test]
-async fn mdns_on_message_received_forwards_to_registered_channel() {
-    let (cmd_tx, _cmd_rx) = mpsc::channel(8);
-    let transport = MdnsTransport::new(cmd_tx);
-
-    let mut rx = transport.register_handshake("peer-y").await;
-    let data = NearbyPacket::Message(NearbyMessage::ConnectDecline)
-        .serialize()
-        .unwrap();
-
-    let route = transport
-        .on_message_received("peer-y".to_string(), data)
-        .await;
-
-    assert!(matches!(route, NearbyRouteResult::HandledInternally));
-    let msg = rx
-        .recv()
-        .await
-        .expect("expected forwarded handshake message");
-    assert!(matches!(msg, NearbyMessage::ConnectDecline));
 }
 
 #[tokio::test]

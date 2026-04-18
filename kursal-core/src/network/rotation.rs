@@ -3,7 +3,7 @@ use crate::{
     api::CoreCommand,
     contacts::Contact,
     crypto::dilithium::dilithium_sign,
-    first_contact::{WireMessage, nearby::MdnsTransport},
+    first_contact::{WireMessage, nearby::mdns::MdnsTransport},
     identity::TransportIdentity,
     messaging::enums::KeyRotation,
     network::{
@@ -127,7 +127,10 @@ impl NetworkManager {
         self.primary = new_primary;
 
         // update mdns_transport to use new swarm's command channel
-        self.mdns_transport = Some(Arc::new(MdnsTransport::new(self.primary.cmd_tx.clone())));
+        self.mdns_transport = Arc::new(MdnsTransport::new(
+            self.primary.cmd_tx.clone(),
+            self.my_beacon.clone(),
+        ));
 
         Ok(())
     }

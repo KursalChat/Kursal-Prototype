@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { page } from "$app/stores";
+  import { page } from "$app/state";
   import { onMount, tick } from "svelte";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
+  import { stat } from "@tauri-apps/plugin-fs";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
@@ -15,43 +16,42 @@
     editMessage,
     addReaction,
     removeReaction,
+    sendTypingIndicator,
   } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
   import {
+    pickFileForSend,
+    pickFileForReceive,
     prepareOfferSourcePath,
-    resolveReceiveSavePath,
     registerDeferredReceiveTarget,
   } from "$lib/utils/file-transfer-paths";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
-  import { marked } from "marked";
-  import DOMPurify from "dompurify";
-  import { openUrl } from "@tauri-apps/plugin-opener";
-  import { open, save, confirm } from "@tauri-apps/plugin-dialog";
-  import {
-    ShieldAlert,
-    Send,
-    Reply,
-    Copy,
-    ArrowLeft,
-    X,
-    Edit2,
-    Trash2,
-    Smile,
-    Paperclip,
-    File,
-    Download,
-  } from "lucide-svelte";
+  import { confirm } from "@tauri-apps/plugin-dialog";
+  import { ShieldAlert, X, Paperclip, ChevronDown } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
-  import StatusDot from "$lib/components/StatusDot.svelte";
   import Spinner from "$lib/components/Spinner.svelte";
   import SecurityCodeModal from "$lib/components/SecurityCodeModal.svelte";
   import ProfileModal from "$lib/components/ProfileModal.svelte";
+  import ChatHeader from "./ChatHeader.svelte";
+  import MessageBubble from "./MessageBubble.svelte";
+  import MessageComposer from "./MessageComposer.svelte";
+  import ActionSheet from "./ActionSheet.svelte";
+  import FileConfirmModal from "./FileConfirmModal.svelte";
+  import EmojiPicker from "$lib/components/EmojiPicker.svelte";
+  import {
+    formatGroupTime,
+    getMessagePreview,
+    handleMarkdownClick,
+  } from "./chat-utils";
 
-  const contactId = $derived($page.params.id ?? "");
+  const contactId = $derived(page.params.id ?? "");
   const contact = $derived(contactId ? contactsState.getById(contactId) : null);
   const messages = $derived(
     contactId ? messagesState.forContact(contactId) : [],
+  );
+  const firstUnreadId = $derived(
+    contactId ? messagesState.firstUnreadFor(contactId) : null,
   );
 
   let inputText = $state("");
@@ -61,22 +61,35 @@
   let hoveredMessageId = $state<string | null>(null);
   let replyingToMessageId = $state<string | null>(null);
   let editingMessageId = $state<string | null>(null);
-  let showsReactionPicker = $state<string | null>(null);
+  let showEmojiPicker = $state<string | null>(null);
+  let emojiPickerAnchor = $state<DOMRect | null>(null);
+  let actionSheetMsgId = $state<string | null>(null);
   let fileOfferActionState = $state<
     Record<string, "idle" | "accepting" | "accepted">
   >({});
+  const completedFileTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let isCoarsePointer = $state(false);
   let listEl = $state<HTMLElement | null>(null);
   let composerEl = $state<HTMLTextAreaElement | null>(null);
 
-  // Auto-scroll logic
   let isScrolledToBottom = $state(true);
+  let isAtMaxBottom = $state(true);
   let unreadCount = $state(0);
+  let isDraggingFile = $state(false);
+  let pendingFile = $state<{
+    backendPath: string;
+    filename: string;
+    sizeBytes: number;
+  } | null>(null);
+  let sendingFile = $state(false);
+  let unlistenDrop: (() => void) | null = null;
   let prevMessagesLength = $state(0);
   let pendingScrollFrame = 0;
+  let windowFocused = $state(true);
   let lastFocusedBeforeModal = $state<HTMLElement | null>(null);
-  const markdownCache = new Map<string, string>();
-  const trustedHosts = new Set(["github.com", "docs.rs", "crates.io"]);
+
+  let swipeStart = { x: 0, y: 0, id: "" };
+  let swipeOffset = $state<{ id: string; dx: number } | null>(null);
 
   let dismissedBanner = $state(false);
   let showShareBanner = $derived(
@@ -86,15 +99,12 @@
   async function handleShareQuickProfile() {
     if (!browser || !contactId) return;
     try {
-      const name = profileState.displayName;
-      let avatarBytes = profileState.avatarBytes;
-      // Share profile to this specific peer
-      await shareProfile(name, avatarBytes, contactId);
-
-      // Update local state proactively
-      if (contact) {
-        contactsState.upsert({ ...contact, profileShared: true });
-      }
+      await shareProfile(
+        profileState.displayName,
+        profileState.avatarBytes,
+        contactId,
+      );
+      if (contact) contactsState.upsert({ ...contact, profileShared: true });
       notifications.push("Profile shared", "success");
     } catch (e) {
       notifications.push("Failed to share profile", "error");
@@ -103,48 +113,78 @@
   }
 
   function closeShareBanner() {
-    if (browser && contactId) {
-      dismissedBanner = true;
-    }
+    dismissedBanner = true;
   }
 
   function openProfileModal() {
     lastFocusedBeforeModal = document.activeElement as HTMLElement | null;
     showProfile = true;
   }
-
   function closeProfileModal() {
     showProfile = false;
     tick().then(() => lastFocusedBeforeModal?.focus());
   }
-
   function openSecurityCodeModal() {
     lastFocusedBeforeModal = document.activeElement as HTMLElement | null;
     showSecurityCode = true;
   }
-
   function closeSecurityCodeModal() {
     showSecurityCode = false;
     tick().then(() => lastFocusedBeforeModal?.focus());
   }
 
   function handleScroll() {
-    if (!listEl) return;
-    if (pendingScrollFrame) return;
+    if (showEmojiPicker) {
+      showEmojiPicker = null;
+      emojiPickerAnchor = null;
+    }
+    if (!listEl || pendingScrollFrame) return;
     pendingScrollFrame = window.requestAnimationFrame(() => {
       pendingScrollFrame = 0;
       if (!listEl) return;
       const { scrollTop, scrollHeight, clientHeight } = listEl;
-      // 50px threshold for being "at the bottom"
-      isScrolledToBottom =
-        Math.abs(scrollHeight - scrollTop - clientHeight) < 50;
-      if (isScrolledToBottom && unreadCount > 0) {
-        unreadCount = 0;
-      }
-      if (isScrolledToBottom && contactId) {
+      const distFromBottom = scrollHeight - scrollTop - clientHeight;
+      isScrolledToBottom = Math.abs(distFromBottom) < 60;
+      isAtMaxBottom = distFromBottom <= 2;
+      if (isScrolledToBottom && unreadCount > 0) unreadCount = 0;
+      if (isAtMaxBottom && contactId && windowFocused)
         messagesState.markRead(contactId);
-      }
     });
+  }
+
+  const PICKER_W = 288;
+  const PICKER_H = 320;
+  const emojiPickerPos = $derived.by(() => {
+    if (!emojiPickerAnchor) return null;
+    const r = emojiPickerAnchor;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const margin = 8;
+    const spaceAbove = r.top;
+    const spaceBelow = vh - r.bottom;
+    let top: number;
+    if (spaceAbove >= PICKER_H + margin) {
+      top = r.top - PICKER_H - margin;
+    } else if (spaceBelow >= PICKER_H + margin) {
+      top = r.bottom + margin;
+    } else {
+      top = Math.max(margin, vh - PICKER_H - margin);
+    }
+    let left = r.left + r.width / 2 - PICKER_W / 2;
+    left = Math.max(margin, Math.min(left, vw - PICKER_W - margin));
+    return { top, left };
+  });
+
+  async function handlePickerSelect(emoji: string) {
+    if (!showEmojiPicker) return;
+    const msg = messageIndex.get(showEmojiPicker);
+    if (msg) await toggleReaction(msg, emoji);
+    showEmojiPicker = null;
+    emojiPickerAnchor = null;
+  }
+  function closePicker() {
+    showEmojiPicker = null;
+    emojiPickerAnchor = null;
   }
 
   function scrollToBottom(behavior: ScrollBehavior = "auto") {
@@ -152,117 +192,43 @@
     listEl.scrollTo({ top: listEl.scrollHeight, behavior });
     unreadCount = 0;
     isScrolledToBottom = true;
-    if (contactId) messagesState.markRead(contactId);
+    isAtMaxBottom = true;
+    if (contactId && windowFocused) messagesState.markRead(contactId);
   }
 
-  function renderMarkdown(content: string, isEdited: boolean = false): string {
-    const cacheKey = content + (isEdited ? "|edited" : "|not");
-    const cached = markdownCache.get(cacheKey);
-    if (cached) return cached;
+  const visibleMessages = $derived.by(() =>
+    messages.length > 300 ? messages.slice(messages.length - 300) : messages,
+  );
 
-    let html = marked.parse(content, {
-      async: false,
-      gfm: true,
-      breaks: true,
-    }) as string;
-
-    if (isEdited) {
-      const editedSpan =
-        ' <span class="edited-badge" style="font-size: 0.85em; opacity: 0.6; margin-left: 6px;">(edited)</span>';
-      if (html.endsWith("</p>\n")) {
-        html = html.replace(/<\/p>\n$/, `${editedSpan}</p>\n`);
-      } else if (html.endsWith("</p>")) {
-        html = html.replace(/<\/p>$/, `${editedSpan}</p>`);
-      } else {
-        html += editedSpan;
-      }
-    }
-
-    const sanitized = DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: [
-        "p",
-        "br",
-        "b",
-        "i",
-        "em",
-        "strong",
-        "a",
-        "pre",
-        "code",
-        "blockquote",
-        "ul",
-        "ol",
-        "li",
-        "del",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "hr",
-        "span",
-      ],
-      ALLOWED_ATTR: ["href", "class", "target", "rel", "style"], // Allow span and style
-    });
-    markdownCache.set(cacheKey, sanitized);
-    if (markdownCache.size > 600) {
-      const firstKey = markdownCache.keys().next().value;
-      if (firstKey) markdownCache.delete(firstKey);
-    }
-    return sanitized;
+  interface MessageGroup {
+    direction: "sent" | "received";
+    messages: MessageResponse[];
+    timestamp: number;
   }
 
-  async function handleMarkdownClick(e: MouseEvent) {
-    const target = e.target as HTMLElement | null;
-    const anchor = target?.closest("a") as HTMLAnchorElement | null;
-    if (!anchor) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const href = anchor.getAttribute("href");
-    if (!href) return;
-
-    try {
-      const url = new URL(href, window.location.origin);
-      if (!["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
-        notifications.push("Unsupported link type", "error");
-        return;
-      }
-
+  const messageGroups = $derived.by(() => {
+    const groups: MessageGroup[] = [];
+    for (const msg of visibleMessages) {
+      const last = groups[groups.length - 1];
+      const forceBreak = msg.id === firstUnreadId;
       if (
-        ["http:", "https:"].includes(url.protocol) &&
-        !trustedHosts.has(url.hostname)
+        !forceBreak &&
+        last &&
+        last.direction === msg.direction &&
+        msg.timestamp - last.messages[last.messages.length - 1].timestamp <
+          300000
       ) {
-        const approved = await confirm(
-          `Open external link in browser?\n\n${url.toString()}`,
-          { title: "Open External Link", kind: "warning" },
-        );
-        if (!approved) return;
+        last.messages.push(msg);
+      } else {
+        groups.push({
+          direction: msg.direction,
+          messages: [msg],
+          timestamp: msg.timestamp,
+        });
       }
-
-      await openUrl(url.toString());
-    } catch (e) {
-      notifications.push(
-        `Failed to open link: ${e instanceof Error ? e.message : e}`,
-        "error",
-      );
     }
-  }
-
-  const visibleMessages = $derived.by(() => {
-    return messages.length > 250
-      ? messages.slice(messages.length - 250)
-      : messages;
+    return groups;
   });
-
-  function formatFileSize(bytes: number): string {
-    if (bytes <= 0) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  }
 
   function transferPercent(transferId: string): number {
     const p = messagesState.transferProgressFor(transferId);
@@ -272,30 +238,41 @@
       Math.min(100, Math.round((p.bytesTransferred / p.totalBytes) * 100)),
     );
   }
-
   function isTransferDone(transferId: string): boolean {
     const p = messagesState.transferProgressFor(transferId);
     if (!p || p.totalBytes <= 0) return false;
     return p.bytesTransferred >= p.totalBytes;
   }
 
-  function getMessagePreview(content: string): string {
-    const clean = content.replace(/\s+/g, " ").trim();
-    if (!clean) return "(empty message)";
-    return clean.length > 92 ? clean.slice(0, 89) + "..." : clean;
-  }
-
   function resizeComposer() {
     if (!composerEl) return;
     composerEl.style.height = "auto";
-    composerEl.style.height = `${Math.min(composerEl.scrollHeight, 170)}px`;
+    composerEl.style.height = `${Math.min(composerEl.scrollHeight, 180)}px`;
+  }
+
+  let lastTypingSentAt = 0;
+  function maybeSendTyping() {
+    if (!contactId) return;
+    if (!inputText.trim()) {
+      lastTypingSentAt = 0;
+      return;
+    }
+    const now = Date.now();
+    if (now - lastTypingSentAt < 7000) return;
+    lastTypingSentAt = now;
+    void sendTypingIndicator(contactId, replyingToMessageId).catch((e) => {
+      console.error("send_typing_indicator failed", e);
+    });
+  }
+
+  function onComposerInput() {
+    resizeComposer();
+    maybeSendTyping();
   }
 
   const messageIndex = $derived.by(() => {
     const byId = new Map<string, MessageResponse>();
-    for (const msg of messages) {
-      byId.set(msg.id, msg);
-    }
+    for (const msg of messages) byId.set(msg.id, msg);
     return byId;
   });
 
@@ -304,63 +281,69 @@
       ? getMessagePreview(messageIndex.get(replyingToMessageId)?.content ?? "")
       : "",
   );
+  const editingPreview = $derived(
+    editingMessageId
+      ? getMessagePreview(messageIndex.get(editingMessageId)?.content ?? "")
+      : "",
+  );
 
-  function startReply(message: MessageResponse) {
-    replyingToMessageId = message.id;
+  function startReply(msg: MessageResponse) {
+    replyingToMessageId = msg.id;
     editingMessageId = null;
+    actionSheetMsgId = null;
     tick().then(() => composerEl?.focus());
   }
-
-  function startEdit(message: MessageResponse) {
-    editingMessageId = message.id;
+  function startEdit(msg: MessageResponse) {
+    editingMessageId = msg.id;
     replyingToMessageId = null;
-    inputText = message.content;
+    inputText = msg.content;
+    actionSheetMsgId = null;
     tick().then(() => composerEl?.focus());
   }
-
   function cancelEdit() {
     editingMessageId = null;
     inputText = "";
   }
-
   function cancelReply() {
     replyingToMessageId = null;
   }
 
-  async function handleDelete(message: MessageResponse) {
+  async function handleDelete(msg: MessageResponse) {
+    actionSheetMsgId = null;
     if (
-      await confirm(
-        "Are you sure you want to delete this message for everyone?",
-      )
+      await confirm("Delete this message for everyone?", {
+        title: "Delete message",
+        kind: "warning",
+      })
     ) {
       try {
-        await deleteMessage(contactId, message.id);
-        messagesState.markDeleted(message.id, contactId);
+        await deleteMessage(contactId, msg.id);
+        messagesState.markDeleted(msg.id, contactId);
       } catch (e) {
-        console.error("Failed to delete message", e);
+        console.error("Delete failed", e);
         notifications.push("Failed to delete message", "error");
       }
     }
   }
 
-  async function toggleReaction(message: MessageResponse, emoji: string) {
+  async function toggleReaction(msg: MessageResponse, emoji: string) {
     try {
-      const reactions = messagesState.reactionsFor(message.id, contactId);
-      const isReactedByMe = reactions
+      const reactions = messagesState.reactionsFor(msg.id, contactId);
+      const isReacted = reactions
         .find((r) => r.emoji === emoji)
         ?.userIds.includes(profileState.userId || "");
-      if (isReactedByMe) {
-        await removeReaction(contactId, message.id, emoji);
+      if (isReacted) {
+        await removeReaction(contactId, msg.id, emoji);
         messagesState.removeReaction(
-          message.id,
+          msg.id,
           contactId,
           emoji,
           profileState.userId || "",
         );
       } else {
-        await addReaction(contactId, message.id, emoji);
+        await addReaction(contactId, msg.id, emoji);
         messagesState.addReaction(
-          message.id,
+          msg.id,
           contactId,
           emoji,
           profileState.userId || "",
@@ -369,39 +352,130 @@
     } catch (e) {
       console.error("React failed", e);
     }
+    showEmojiPicker = null;
+    actionSheetMsgId = null;
   }
 
-  async function copyMessageText(message: MessageResponse) {
+  async function copyMessageText(msg: MessageResponse) {
+    actionSheetMsgId = null;
     try {
-      await navigator.clipboard.writeText(message.content);
-      notifications.push("Message copied", "success");
+      await navigator.clipboard.writeText(msg.content);
+      notifications.push("Copied", "success");
     } catch {
-      notifications.push("Could not copy message", "error");
+      notifications.push("Could not copy", "error");
+    }
+  }
+
+  function handleReplyRefClick(replyToId: string) {
+    const el = listEl?.querySelector(`[data-msg-id="${replyToId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    (el as HTMLElement | null)?.classList.add("flash");
+    setTimeout(
+      () => (el as HTMLElement | null)?.classList.remove("flash"),
+      1200,
+    );
+  }
+
+  async function handleDeleteLocal(msg: MessageResponse) {
+    try {
+      await deleteLocalMessage(msg.contactId, msg.id);
+      messagesState.removeLocally(msg.id, msg.contactId);
+    } catch (e) {
+      notifications.push("Failed to delete", "error");
     }
   }
 
   onMount(() => {
     isCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    windowFocused =
+      document.hasFocus() && document.visibilityState === "visible";
 
-    // Load messages and check if contact exists
-    messagesState.loadFor(contactId);
+    const onFocus = () => {
+      windowFocused = document.visibilityState === "visible";
+    };
+    const onBlur = () => {
+      windowFocused = false;
+    };
+    const onVisibility = () => {
+      windowFocused =
+        document.visibilityState === "visible" && document.hasFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
 
-    // After loading, check if contact exists
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if (!composerEl) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key.length !== 1) return;
+      const ae = document.activeElement;
+      if (ae === composerEl) return;
+      if (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement)
+        return;
+      if (ae instanceof HTMLElement && ae.isContentEditable) return;
+      composerEl.focus();
+    };
+    window.addEventListener("keydown", onGlobalKey);
+
+    void (async () => {
+      try {
+        const { getCurrentWebview } = await import("@tauri-apps/api/webview");
+        unlistenDrop = await getCurrentWebview().onDragDropEvent((event) => {
+          const p = event.payload;
+          if (p.type === "enter" || p.type === "over") {
+            isDraggingFile = true;
+          } else if (p.type === "leave") {
+            isDraggingFile = false;
+          } else if (p.type === "drop") {
+            isDraggingFile = false;
+            const paths = (p as { paths?: string[] }).paths ?? [];
+            void handleDroppedPaths(paths);
+          }
+        });
+      } catch (e) {
+        console.warn("Drag/drop not available:", e);
+      }
+    })();
+
+    let contactMissingTimer: ReturnType<typeof setTimeout> | null = null;
     if (!contact && !contactsState.loading) {
-      // Short delay to allow for state update
-      const timer = setTimeout(() => {
+      contactMissingTimer = setTimeout(() => {
         if (contactId && !contactsState.getById(contactId)) {
           notifications.push("Contact not found", "error");
           goto("/chat", { replaceState: true });
         }
       }, 100);
-      return () => clearTimeout(timer);
     }
 
     return () => {
-      if (pendingScrollFrame) {
-        window.cancelAnimationFrame(pendingScrollFrame);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("keydown", onGlobalKey);
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (contactMissingTimer) clearTimeout(contactMissingTimer);
+      if (pendingScrollFrame) window.cancelAnimationFrame(pendingScrollFrame);
+      for (const t of completedFileTimers.values()) clearTimeout(t);
+      completedFileTimers.clear();
+      unlistenDrop?.();
+      unlistenDrop = null;
+    };
+  });
+
+  $effect(() => {
+    const id = contactId;
+    if (!id) return;
+    void messagesState.loadFor(id).then(() => {
+      if (id !== contactId) return;
+      const unread = messagesState.unreadFor(id);
+      if (unread > 0 && !messagesState.firstUnreadFor(id)) {
+        const list = messagesState.forContact(id);
+        const idx = Math.max(0, list.length - unread);
+        const first = list.slice(idx).find((m) => m.direction === "received");
+        if (first) messagesState.setFirstUnread(id, first.id);
       }
+    });
+    return () => {
+      messagesState.clearFirstUnread(id);
     };
   });
 
@@ -416,7 +490,6 @@
     };
   });
 
-  // Scroll to bottom whenever messages change
   $effect(() => {
     const len = messages.length;
     if (len > prevMessagesLength) {
@@ -429,21 +502,48 @@
           unreadCount += diff;
         }
       });
-    } else if (len < prevMessagesLength) {
-      // Something was deleted, maybe a reaction length changed, just ignore
     }
     prevMessagesLength = len;
   });
 
   $effect(() => {
-    if (contactId && isScrolledToBottom) {
+    if (contactId && isAtMaxBottom && windowFocused)
       messagesState.markRead(contactId);
+  });
+
+  $effect(() => {
+    for (const [msgId, st] of Object.entries(fileOfferActionState)) {
+      if (st !== "accepted") continue;
+      if (!isTransferDone(msgId)) continue;
+      if (completedFileTimers.has(msgId)) continue;
+      const timer = setTimeout(() => {
+        fileOfferActionState[msgId] = "idle";
+        completedFileTimers.delete(msgId);
+      }, 8000);
+      completedFileTimers.set(msgId, timer);
     }
   });
 
   $effect(() => {
+    const id = contactId;
+    const unreadId = firstUnreadId;
+    const _len = messages.length;
+    if (!id || !unreadId) return;
+    if (!windowFocused || !isAtMaxBottom) return;
+    const timer = setTimeout(() => {
+      messagesState.clearFirstUnread(id);
+    }, 2000);
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() => {
     inputText;
-    tick().then(resizeComposer);
+    tick().then(() => {
+      resizeComposer();
+      if (isScrolledToBottom && listEl) {
+        listEl.scrollTop = listEl.scrollHeight;
+      }
+    });
   });
 
   async function handleSend() {
@@ -469,12 +569,11 @@
 
     const replyTo = replyingToMessageId;
     inputText = "";
+    lastTypingSentAt = 0;
     sending = true;
-
     try {
       if (!contactId) return;
       const messageId = await sendText(contactId, text, replyTo);
-      // Optimistically add to UI
       messagesState.appendOptimistic({
         id: messageId,
         contactId,
@@ -486,7 +585,7 @@
       });
       cancelReply();
     } catch (e) {
-      inputText = text; // restore text on error
+      inputText = text;
       notifications.push("Failed to send message", "error");
       console.error("Send failed:", e);
     } finally {
@@ -494,32 +593,54 @@
     }
   }
 
+  async function stageFileForSend(backendPath: string, filename: string) {
+    let sizeBytes = 0;
+    try {
+      const info = await stat(backendPath);
+      sizeBytes = Number(info.size ?? 0);
+    } catch {
+      sizeBytes = 0;
+    }
+    pendingFile = { backendPath, filename, sizeBytes };
+  }
+
   async function handleSendFile() {
     try {
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        pickerMode: "document",
-        fileAccessMode: "copy",
-      });
-      if (!selected) return;
+      const prepared = await pickFileForSend();
+      if (!prepared) return;
+      await stageFileForSend(prepared.backendPath, prepared.filename);
+    } catch (e) {
+      notifications.push(
+        `Failed to open file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
+      console.error("File pick failed:", e);
+    }
+  }
 
-      const selectedPath = Array.isArray(selected) ? selected[0] : selected;
-      const rawPath =
-        typeof selectedPath === "string"
-          ? selectedPath
-          : String((selectedPath as { path?: string }).path ?? selectedPath);
-      const prepared = await prepareOfferSourcePath(rawPath);
+  async function handleDroppedPaths(paths: string[]) {
+    if (!paths?.length || !contactId) return;
+    try {
+      const prepared = await prepareOfferSourcePath(paths[0]);
+      await stageFileForSend(prepared.backendPath, prepared.filename);
+    } catch (e) {
+      notifications.push(
+        `Failed to prepare file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
+      console.error("Drop handler failed:", e);
+    }
+  }
 
-      sending = true;
-      if (!contactId) return;
-
+  async function confirmSendFile() {
+    if (!pendingFile || !contactId || sendingFile) return;
+    const file = pendingFile;
+    sendingFile = true;
+    try {
       const [messageId, fileSize] = await sendFileOffer(
         contactId,
-        prepared.backendPath,
+        file.backendPath,
       );
-
-      // Optimistically add to UI
       messagesState.appendOptimistic({
         id: messageId,
         contactId,
@@ -528,45 +649,39 @@
         status: "sending",
         timestamp: Date.now(),
         replyTo: null,
-        fileDetails: {
-          filename: prepared.filename,
-          sizeBytes: fileSize,
-        },
+        fileDetails: { filename: file.filename, sizeBytes: fileSize },
       });
+      pendingFile = null;
     } catch (e) {
-      notifications.push("Failed to send file", "error");
+      notifications.push(
+        `Failed to send file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
       console.error("File send failed:", e);
     } finally {
-      sending = false;
+      sendingFile = false;
     }
+  }
+
+  function cancelSendFile() {
+    if (sendingFile) return;
+    pendingFile = null;
   }
 
   async function handleAcceptIncomingFile(msg: MessageResponse) {
     if (!contactId || !msg.fileDetails) return;
-    if (fileOfferActionState[msg.id] === "accepting" || fileOfferActionState[msg.id] === "accepted") return;
-
-    // Prevent immediate double clicks before file dialog opens
-    fileOfferActionState[msg.id] = "accepting";
-
-    const savePath = await save({
-      defaultPath: msg.fileDetails.filename,
-    });
-    if (!savePath) {
-      fileOfferActionState[msg.id] = "idle";
+    if (
+      fileOfferActionState[msg.id] === "accepting" ||
+      fileOfferActionState[msg.id] === "accepted"
+    )
       return;
-    }
-
-    const selectedPath = Array.isArray(savePath) ? savePath[0] : savePath;
-    const rawPath =
-      typeof selectedPath === "string"
-        ? selectedPath
-        : String((selectedPath as { path?: string }).path ?? selectedPath);
-
+    fileOfferActionState[msg.id] = "accepting";
     try {
-      const resolved = await resolveReceiveSavePath(
-        rawPath,
-        msg.fileDetails.filename,
-      );
+      const resolved = await pickFileForReceive(msg.fileDetails.filename);
+      if (!resolved) {
+        fileOfferActionState[msg.id] = "idle";
+        return;
+      }
       await acceptFileOffer(msg.contactId, msg.id, resolved.backendPath);
       if (resolved.deferredTargetUri) {
         registerDeferredReceiveTarget(
@@ -579,47 +694,31 @@
       notifications.push("File transfer accepted", "success");
     } catch (e) {
       fileOfferActionState[msg.id] = "idle";
-      notifications.push("Failed to accept file", "error");
+      notifications.push(
+        `Failed to accept file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
       console.error("Accept file offer failed", e);
     }
   }
 
-  async function handleResend(msg: import("$lib/types").MessageResponse) {
+  async function handleResend(msg: MessageResponse) {
     if (!contactId) return;
-
-    // Remove the failed message from the database first
     try {
       await deleteLocalMessage(msg.contactId, msg.id);
     } catch (e) {
-      console.error("Failed to delete local message before resend", e);
+      console.error("Failed to delete local message", e);
     }
-
-    // Attempt sending again
     messagesState.removeLocally(msg.id, msg.contactId);
 
     if (msg.fileDetails) {
       try {
-        const selected = await open({
-          multiple: false,
-          directory: false,
-          defaultPath: msg.fileDetails.filename,
-          pickerMode: "document",
-          fileAccessMode: "copy",
-        });
-        if (!selected) return;
-
-        const selectedPath = Array.isArray(selected) ? selected[0] : selected;
-        const rawPath =
-          typeof selectedPath === "string"
-            ? selectedPath
-            : String((selectedPath as { path?: string }).path ?? selectedPath);
-        const prepared = await prepareOfferSourcePath(rawPath);
-
+        const prepared = await pickFileForSend(msg.fileDetails.filename);
+        if (!prepared) return;
         const [messageId, fileSize] = await sendFileOffer(
           contactId,
           prepared.backendPath,
         );
-
         messagesState.appendOptimistic({
           id: messageId,
           contactId,
@@ -628,1189 +727,538 @@
           status: "sending",
           timestamp: Date.now(),
           replyTo: null,
-          fileDetails: {
-            filename: prepared.filename,
-            sizeBytes: fileSize,
-          },
+          fileDetails: { filename: prepared.filename, sizeBytes: fileSize },
         });
       } catch (e) {
         notifications.push("Failed to resend file", "error");
-        console.error("File resend failed:", e);
       }
       return;
     }
 
-    const text = msg.content;
-    const replyTo = msg.replyTo;
-
     try {
-      const messageId = await sendText(contactId, text, replyTo);
+      const messageId = await sendText(contactId, msg.content, msg.replyTo);
       messagesState.appendOptimistic({
         id: messageId,
         contactId,
         direction: "sent",
-        content: text,
+        content: msg.content,
         status: "sending",
         timestamp: Date.now(),
-        replyTo,
+        replyTo: msg.replyTo,
       });
     } catch (e) {
-      notifications.push("Failed to resend message", "error");
-      console.error("Resend failed:", e);
+      notifications.push("Failed to resend", "error");
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      if (replyingToMessageId) {
-        e.preventDefault();
-        cancelReply();
-        return;
-      }
-      if (editingMessageId) {
-        e.preventDefault();
-        cancelEdit();
-        return;
-      }
-    }
-
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+  function onBubbleTouchStart(e: TouchEvent, msgId: string) {
+    if (!isCoarsePointer) return;
+    const t = e.touches[0];
+    swipeStart = { x: t.clientX, y: t.clientY, id: msgId };
+  }
+  function onBubbleTouchMove(e: TouchEvent, msgId: string) {
+    if (!isCoarsePointer || swipeStart.id !== msgId) return;
+    const t = e.touches[0];
+    const dx = t.clientX - swipeStart.x;
+    const dy = Math.abs(t.clientY - swipeStart.y);
+    if (Math.abs(dx) > 6 || dy > 6) cancelLongPress();
+    if (dx > 10 && dy < 30) {
+      swipeOffset = { id: msgId, dx: Math.min(dx, 80) };
     }
   }
+  function onBubbleTouchEnd(msgId: string, msg: MessageResponse) {
+    if (swipeOffset?.id === msgId && swipeOffset.dx > 60) {
+      startReply(msg);
+    }
+    swipeStart = { x: 0, y: 0, id: "" };
+    swipeOffset = null;
+  }
+
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  function onBubbleTouchStartLongPress(msgId: string) {
+    if (!isCoarsePointer) return;
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      actionSheetMsgId = msgId;
+      if (navigator.vibrate) navigator.vibrate(15);
+    }, 450);
+  }
+  function cancelLongPress() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  }
+
+  function swipeOffsetFor(id: string): number {
+    return swipeOffset?.id === id ? swipeOffset.dx : 0;
+  }
+
+  const actionSheetMsg = $derived(
+    actionSheetMsgId ? messageIndex.get(actionSheetMsgId) : null,
+  );
 </script>
 
 {#if contact}
-  <div class="chat-container">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-left">
-        <button
-          class="mobile-back-btn"
-          onclick={() => goto("/chat")}
-          title="Back to contacts"
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <Avatar
-          name={contact.displayName}
-          src={contact.avatarBase64}
-          size={34}
-        />
-        <button
-          class="header-info"
-          onclick={openProfileModal}
-          aria-label="Open contact profile"
-        >
-          <div class="header-name-row">
-            <h2>{contact.displayName}</h2>
-            <StatusDot
-              status={contactsState.connectionStatus[contact.userId] ??
-                "disconnected"}
-            />
-            <span class="status-summary">
-              {contactsState.connectionStatus[contact.userId] ===
-                "disconnected" ||
-              !contactsState.connectionStatus[contact.userId]
-                ? "offline"
-                : contactsState.connectionStatus[contact.userId]}
-            </span>
-          </div>
-          <p class="peer-id">ID: {contact.userId.slice(0, 12)}...</p>
-        </button>
-      </div>
-      <div class="header-right">
-        {#if !contact.verified}
-          <button
-            class="verify-btn"
-            title="Verify contact"
-            aria-label="Verify contact"
-            onclick={openSecurityCodeModal}
-          >
-            <ShieldAlert size={16} />
-          </button>
-        {/if}
-      </div>
-    </div>
+  <div class="chat">
+    <ChatHeader
+      {contact}
+      onOpenProfile={openProfileModal}
+      onOpenSecurity={openSecurityCodeModal}
+    />
 
     {#if showShareBanner}
       <div class="share-banner">
-        <span
-          >Share your display name and photo with {contact?.displayName}?</span
-        >
+        <span>Share your profile with <b>{contact.displayName}</b>?</span>
         <div class="banner-actions">
-          <button class="btn-primary btn-sm" onclick={handleShareQuickProfile}
+          <button class="banner-btn primary" onclick={handleShareQuickProfile}
             >Share</button
           >
           <button
-            class="icon-btn"
+            class="banner-btn icon"
             onclick={closeShareBanner}
-            aria-label="Close"
+            aria-label="Dismiss"><X size={14} /></button
           >
-            <X size={16} />
-          </button>
         </div>
       </div>
     {/if}
 
-    <!-- Messages -->
     <div class="messages" bind:this={listEl} onscroll={handleScroll}>
       {#if visibleMessages.length === 0}
-        <div class="no-messages">No messages yet. Say hello!</div>
+        <div class="empty-chat">
+          <Avatar
+            name={contact.displayName}
+            src={contact.avatarBase64}
+            size={72}
+          />
+          <h3>{contact.displayName}</h3>
+          <p>This is the beginning of your encrypted conversation.</p>
+          {#if !contact.verified}
+            <button class="empty-verify" onclick={openSecurityCodeModal}>
+              <ShieldAlert size={14} />
+              Verify identity
+            </button>
+          {/if}
+        </div>
       {:else}
-        {#each visibleMessages as msg (msg.id)}
-          {@const repliedMessage = msg.replyTo
-            ? messageIndex.get(msg.replyTo)
-            : null}
-          <div
-            class="message-row"
-            class:sent={msg.direction === "sent"}
-            role="group"
-            data-msg-id={msg.id}
-            onmouseenter={() => (hoveredMessageId = msg.id)}
-            onmouseleave={() => (hoveredMessageId = null)}
-          >
-            <div class="message-bubble">
-              {#if msg.replyTo}
-                <div class="reply-reference">
-                  <span class="reply-pill">Reply</span>
-                  <span class="reply-content">
-                    {#if repliedMessage}
-                      {getMessagePreview(repliedMessage.content)}
-                    {:else}
-                      Original message
-                    {/if}
-                  </span>
-                </div>
-              {/if}
-
-              <div class="selectable markdown-content">
-                <div class="message-content-inner">
-                  {#if msg.fileDetails}
-                    <div class="file-offer-bubble">
-                      <div class="file-icon"><File size={28} /></div>
-                      <div class="file-details">
-                        <div class="file-name">{msg.fileDetails.filename}</div>
-                        <div class="file-size">
-                          {msg.direction === "sent"
-                            ? "Shared File"
-                            : "Received File"}{formatFileSize(
-                            msg.fileDetails.sizeBytes,
-                          )
-                            ? ` • ${formatFileSize(msg.fileDetails.sizeBytes)}`
-                            : ""}
-                        </div>
-                        {#if messagesState.transferProgressFor(msg.id)}
-                          <div class="file-progress-wrap">
-                            <div class="file-progress-bar">
-                              <div
-                                class="file-progress-fill"
-                                style={`width: ${transferPercent(msg.id)}%`}
-                              ></div>
-                            </div>
-                            <div class="file-progress-label">
-                              {transferPercent(msg.id)}%
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                      {#if msg.direction === "received"}
-                        {#if fileOfferActionState[msg.id] === "accepted"}
-                          {#if isTransferDone(msg.id)}
-                            <span
-                              class="file-offer-state accepted"
-                              aria-label="Transfer complete"
-                              title="Transfer complete">✓</span
-                            >
-                          {/if}
-                        {:else}
-                          <button
-                            class="file-download-btn"
-                            title="Accept file"
-                            disabled={fileOfferActionState[msg.id] ===
-                              "accepting"}
-                            onclick={() => handleAcceptIncomingFile(msg)}
-                          >
-                            <Download size={18} />
-                          </button>
-                        {/if}
-                      {/if}
-                    </div>
-                  {:else}
-                    {@html renderMarkdown(msg.content, msg.edited)}
-                  {/if}
-                </div>
-              </div>
-
-              {#if messagesState.reactionsFor(msg.id, msg.contactId).length > 0}
-                <div class="message-reactions">
-                  {#each messagesState.reactionsFor(msg.id, msg.contactId) as reaction}
-                    <button
-                      class="reaction-chip"
-                      class:by-me={reaction.userIds.includes(
-                        profileState.userId || "",
-                      )}
-                      onclick={() => toggleReaction(msg, reaction.emoji)}
-                    >
-                      {reaction.emoji}
-                      {#if reaction.userIds.length > 1}<span
-                          class="reaction-count">{reaction.userIds.length}</span
-                        >{/if}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-
-              <div class="message-meta">
-                <div class="message-time">
-                  {new Date(msg.timestamp).toLocaleTimeString()}
-                </div>
-                {#if msg.direction === "sent" && msg.status !== "delivered"}
-                  <div
-                    class="status-indicator"
-                    class:failed={msg.status === "failed"}
-                  >
-                    <span class="status">
-                      {msg.status === "sending"
-                        ? "Sending..."
-                        : "Failed to send"}
-                    </span>
-                    {#if msg.status === "failed"}
-                      <div class="failed-actions">
-                        <button
-                          type="button"
-                          class="failed-btn"
-                          onclick={() => handleResend(msg)}>Try again</button
-                        >
-                        <span class="failed-divider">•</span>
-                        <button
-                          type="button"
-                          class="failed-btn"
-                          onclick={async () => {
-                            try {
-                              await deleteLocalMessage(msg.contactId, msg.id);
-                              messagesState.removeLocally(
-                                msg.id,
-                                msg.contactId,
-                              );
-                            } catch (e) {
-                              console.error(
-                                "Failed to delete local message",
-                                e,
-                              );
-                              notifications.push(
-                                "Failed to delete message",
-                                "error",
-                              );
-                            }
-                          }}>Delete</button
-                        >
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
-              </div>
+        {#each messageGroups as group, gi (gi)}
+          {#if firstUnreadId && group.messages[0]?.id === firstUnreadId}
+            <div class="unread-separator" aria-label="New messages">
+              <span>New messages</span>
             </div>
-
-            {#if hoveredMessageId === msg.id || isCoarsePointer || showsReactionPicker === msg.id}
-              <div class="message-actions">
-                <div class="reaction-wrapper">
-                  {#if showsReactionPicker === msg.id}
-                    <div class="reaction-picker">
-                      {#each ["👍", "❤️", "😂", "😲", "😢", "😡"] as emoji}
-                        <button
-                          class="reaction-emoji-btn"
-                          onclick={() => {
-                            toggleReaction(msg, emoji);
-                            showsReactionPicker = null;
-                          }}>{emoji}</button
-                        >
-                      {/each}
-                    </div>
-                  {/if}
-                  <button
-                    class="action-btn"
-                    title="Add reaction"
-                    type="button"
-                    onclick={() =>
-                      (showsReactionPicker =
-                        showsReactionPicker === msg.id ? null : msg.id)}
-                    ><Smile size={14} /></button
-                  >
-                </div>
-                <button
-                  class="action-btn"
-                  title="Reply"
-                  type="button"
-                  onclick={() => startReply(msg)}><Reply size={14} /></button
-                >
-                <button
-                  class="action-btn"
-                  title="Copy"
-                  type="button"
-                  onclick={() => copyMessageText(msg)}
-                  ><Copy size={14} /></button
-                >
-                {#if msg.direction === "sent"}
-                  <button
-                    class="action-btn"
-                    title="Edit"
-                    type="button"
-                    onclick={() => startEdit(msg)}><Edit2 size={14} /></button
-                  >
-                  <button
-                    class="action-btn"
-                    title="Delete"
-                    type="button"
-                    onclick={() => handleDelete(msg)}
-                    ><Trash2 size={14} /></button
-                  >
-                {/if}
+          {/if}
+          <div class="msg-group" class:sent={group.direction === "sent"}>
+            {#if gi === 0 || group.timestamp - messageGroups[gi - 1].timestamp > 3600000}
+              <div class="time-separator">
+                <span>{formatGroupTime(group.timestamp)}</span>
               </div>
             {/if}
+
+            <div class="group-body" class:sent={group.direction === "sent"}>
+              {#if group.direction === "received"}
+                <div class="group-avatar">
+                  <Avatar
+                    name={contact.displayName}
+                    src={contact.avatarBase64}
+                    size={28}
+                  />
+                </div>
+              {/if}
+              <div
+                class="group-messages"
+                class:sent={group.direction === "sent"}
+              >
+                {#each group.messages as msg, mi (msg.id)}
+                  {@const repliedMessage = msg.replyTo
+                    ? (messageIndex.get(msg.replyTo) ?? null)
+                    : null}
+                  {@const reactions = messagesState.reactionsFor(
+                    msg.id,
+                    msg.contactId,
+                  )}
+                  <MessageBubble
+                    {msg}
+                    {repliedMessage}
+                    {reactions}
+                    userId={profileState.userId || ""}
+                    isFirst={mi === 0}
+                    isLast={mi === group.messages.length - 1}
+                    {isCoarsePointer}
+                    hovered={hoveredMessageId === msg.id}
+                    emojiOpen={showEmojiPicker === msg.id}
+                    swipeDx={swipeOffsetFor(msg.id)}
+                    fileOfferState={fileOfferActionState[msg.id]}
+                    transferPercent={transferPercent(msg.id)}
+                    transferInProgress={!!messagesState.transferProgressFor(
+                      msg.id,
+                    ) && !isTransferDone(msg.id)}
+                    transferDone={isTransferDone(msg.id)}
+                    onHoverEnter={() => (hoveredMessageId = msg.id)}
+                    onHoverLeave={() => (hoveredMessageId = null)}
+                    onTouchStart={(e) => {
+                      onBubbleTouchStart(e, msg.id);
+                      onBubbleTouchStartLongPress(msg.id);
+                    }}
+                    onTouchMove={(e) => onBubbleTouchMove(e, msg.id)}
+                    onTouchEnd={() => {
+                      onBubbleTouchEnd(msg.id, msg);
+                      cancelLongPress();
+                    }}
+                    onTouchCancel={() => {
+                      swipeStart = { x: 0, y: 0, id: "" };
+                      swipeOffset = null;
+                      cancelLongPress();
+                    }}
+                    onReplyRefClick={handleReplyRefClick}
+                    onAcceptFile={() => handleAcceptIncomingFile(msg)}
+                    onToggleReact={(emoji) => toggleReaction(msg, emoji)}
+                    onStartReply={() => startReply(msg)}
+                    onCopy={() => copyMessageText(msg)}
+                    onStartEdit={() => startEdit(msg)}
+                    onDelete={() => handleDelete(msg)}
+                    onResend={() => handleResend(msg)}
+                    onDeleteLocal={() => handleDeleteLocal(msg)}
+                    onToggleEmojiPicker={(rect) => {
+                      if (showEmojiPicker === msg.id) {
+                        showEmojiPicker = null;
+                        emojiPickerAnchor = null;
+                      } else {
+                        showEmojiPicker = msg.id;
+                        emojiPickerAnchor = rect;
+                      }
+                    }}
+                  />
+                {/each}
+              </div>
+            </div>
           </div>
         {/each}
       {/if}
     </div>
 
-    <!-- Input -->
-    <div class="input-area">
-      {#if unreadCount > 0 && !isScrolledToBottom}
-        <button class="unread-banner" onclick={() => scrollToBottom("smooth")}>
-          {unreadCount} new message{unreadCount === 1 ? "" : "s"}
-        </button>
-      {/if}
-
-      {#if contact.blocked}
-        <div class="blocked-message">
-          <p>You cannot send messages to a blocked contact.</p>
-          <button class="unblock-btn" onclick={openProfileModal}
-            >Profile Settings</button
+    {#if !isScrolledToBottom}
+      <button
+        class="scroll-to-bottom"
+        onclick={() => scrollToBottom("smooth")}
+        aria-label="Jump to latest"
+      >
+        {#if unreadCount > 0}
+          <span class="scroll-badge"
+            >{unreadCount > 99 ? "99+" : unreadCount}</span
           >
-        </div>
-      {:else}
-        {#if replyingToMessageId}
-          <div class="replying-banner">
-            <div class="replying-label">Replying to message</div>
-            <div class="replying-preview">{replyingToPreview}</div>
-            <button class="reply-cancel" type="button" onclick={cancelReply}
-              >Cancel</button
-            >
-          </div>
-        {:else if editingMessageId}
-          <div class="replying-banner">
-            <div class="replying-label">Editing message</div>
-            <div class="replying-preview"></div>
-            <button class="reply-cancel" type="button" onclick={cancelEdit}
-              >Cancel</button
-            >
-          </div>
         {/if}
+        <ChevronDown size={18} />
+      </button>
+    {/if}
 
-        <button
-          class="attach-button action-btn"
-          type="button"
-          title="Attach file"
-          onclick={handleSendFile}
-          disabled={sending}
-        >
-          <Paperclip size={18} />
-        </button>
-
-        <textarea
-          bind:this={composerEl}
-          bind:value={inputText}
-          oninput={resizeComposer}
-          onkeydown={handleKeydown}
-          placeholder="Type a message..."
-          rows="1"
-          disabled={sending}
-        ></textarea>
-        <div class="send-button">
-          {#if sending}
-            <Spinner size={18} color="var(--accent)" />
-          {:else}
-            <button onclick={handleSend} disabled={!inputText.trim()}>
-              <Send size={18} />
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
+    <MessageComposer
+      {contact}
+      bind:inputText
+      {sending}
+      {isCoarsePointer}
+      replyingPreview={replyingToPreview}
+      {editingPreview}
+      replyActive={!!replyingToMessageId}
+      editActive={!!editingMessageId}
+      onSend={handleSend}
+      onAttach={handleSendFile}
+      onInput={onComposerInput}
+      onCancelReply={cancelReply}
+      onCancelEdit={cancelEdit}
+      onOpenProfile={openProfileModal}
+      bind:composerEl
+    />
   </div>
+
+  {#if actionSheetMsg}
+    <ActionSheet
+      msg={actionSheetMsg}
+      onClose={() => (actionSheetMsgId = null)}
+      onReact={(emoji) =>
+        actionSheetMsg && toggleReaction(actionSheetMsg, emoji)}
+      onMoreEmoji={() => {
+        if (actionSheetMsg) {
+          showEmojiPicker = actionSheetMsg.id;
+          actionSheetMsgId = null;
+        }
+      }}
+      onReply={() => actionSheetMsg && startReply(actionSheetMsg)}
+      onCopy={() => actionSheetMsg && copyMessageText(actionSheetMsg)}
+      onEdit={() => actionSheetMsg && startEdit(actionSheetMsg)}
+      onDelete={() => actionSheetMsg && handleDelete(actionSheetMsg)}
+    />
+  {/if}
 
   {#if showSecurityCode && contact}
     <SecurityCodeModal
       contactId={contact.userId}
+      contactVerified={contact.verified}
       onClose={closeSecurityCodeModal}
     />
   {/if}
-
   {#if showProfile && contact}
     <ProfileModal {contact} onClose={closeProfileModal} />
   {/if}
+
+  {#if isDraggingFile}
+    <div class="drop-overlay" aria-hidden="true">
+      <div class="drop-overlay-inner">
+        <Paperclip size={36} />
+        <span>Drop file to send</span>
+      </div>
+    </div>
+  {/if}
+
+  {#if showEmojiPicker}
+    <div
+      class="emoji-picker-layer"
+      style={emojiPickerPos
+        ? `top:${emojiPickerPos.top}px;left:${emojiPickerPos.left}px;`
+        : `top:50%;left:50%;transform:translate(-50%,-50%);`}
+    >
+      <EmojiPicker
+        compact
+        onSelect={handlePickerSelect}
+        onClose={closePicker}
+      />
+    </div>
+  {/if}
+
+  {#if pendingFile}
+    <FileConfirmModal
+      filename={pendingFile.filename}
+      sizeBytes={pendingFile.sizeBytes}
+      sending={sendingFile}
+      onConfirm={confirmSendFile}
+      onCancel={cancelSendFile}
+    />
+  {/if}
 {:else}
-  <div class="loading">
-    <Spinner />
-  </div>
+  <div class="loading"><Spinner /></div>
 {/if}
 
 <style>
-  .chat-container {
+  .chat {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
+    position: relative;
+    background: radial-gradient(
+        1200px 600px at 50% -100px,
+        rgba(99, 102, 241, 0.06),
+        transparent 60%
+      ),
+      var(--bg-primary);
   }
 
   .share-banner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 18px;
-    background: var(--surface);
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--accent-dim);
     border-bottom: 1px solid var(--border);
-    font-size: 0.85rem;
-    color: var(--text-light);
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
   }
-
+  .share-banner b {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
   .banner-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
-
-  .banner-actions .btn-sm {
-    padding: 4px 10px;
-    font-size: 0.8rem;
-    border-radius: 4px;
-  }
-
-  .mobile-back-btn {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    margin-right: -4px;
-    border-radius: 8px;
-    transition: background var(--transition);
-  }
-
-  .mobile-back-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  @media (max-width: 768px) {
-    .mobile-back-btn {
-      display: flex;
-    }
-  }
-
-  .header {
-    min-height: var(--header-height);
-    border-bottom: 1px solid var(--border);
-    padding: 0 18px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: rgba(15, 23, 42, 0.5);
-    backdrop-filter: blur(20px);
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .header-name-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .status-summary {
-    font-size: 13px;
-    color: var(--text-muted);
-    font-weight: normal;
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .header-info {
-    text-align: left;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    border-radius: 8px;
-    padding: 4px 6px;
-    margin-left: -6px;
-    transition: background var(--transition);
-  }
-
-  .header-info:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .header-info h2 {
-    margin: 0;
-    font-size: 17px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
-
-  .peer-id {
-    margin: 0;
+  .banner-btn {
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
     font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .verify-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
-    border: 1px solid rgba(251, 191, 36, 0.45);
-    cursor: pointer;
-    background: rgba(251, 191, 36, 0.1);
-    color: var(--warning);
+    font-weight: 600;
+    color: var(--text-secondary);
     transition: all var(--transition);
-    display: inline-flex;
+  }
+  .banner-btn.icon {
+    padding: 6px;
+    display: flex;
     align-items: center;
     justify-content: center;
   }
-
-  .verify-btn:hover {
-    background: rgba(251, 191, 36, 0.2);
+  .banner-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .banner-btn.primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .banner-btn.primary:hover {
+    background: var(--accent-hover);
   }
 
   .messages {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 18px 18px 14px;
+    overflow-x: hidden;
+    padding: 16px 16px 48px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
   }
 
-  .no-messages {
+  .empty-chat {
     margin: auto;
     text-align: center;
-    color: var(--text-muted);
-    font-size: 14px;
-    border: 1px dashed rgba(148, 163, 184, 0.28);
-    border-radius: 18px;
-    padding: 14px 20px;
-    background: rgba(30, 41, 59, 0.46);
-  }
-
-  .message-row {
-    position: relative;
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-    align-self: flex-start;
-    max-width: 100%;
-    margin-top: 2px;
-    /* Removed content-visibility and contain-intrinsic-size because they cause clipping for absolute children */
-  }
-
-  .message-row.sent {
-    align-self: flex-end;
-    flex-direction: row-reverse;
-  }
-
-  .message-bubble {
-    background: rgba(30, 41, 59, 0.58);
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 14px;
-    padding: 10px 14px;
-    font-size: 14.5px;
-    line-height: 1.45;
-    max-width: min(80vw, 680px);
-    width: fit-content;
-    word-break: break-word;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-  }
-
-  .markdown-content :global(p) {
-    margin: 0;
-  }
-
-  .markdown-content :global(p + p) {
-    margin-top: 0.45rem;
-  }
-
-  .markdown-content :global(code) {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-      "Liberation Mono", "Courier New", monospace;
-    font-size: 0.9em;
-    background: rgba(2, 6, 23, 0.38);
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 6px;
-    padding: 0.08rem 0.3rem;
-  }
-
-  .markdown-content :global(pre) {
-    margin: 0.45rem 0 0;
-    padding: 0.6rem 0.7rem;
-    border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    background: rgba(2, 6, 23, 0.45);
-    overflow-x: auto;
-  }
-
-  .markdown-content :global(pre code) {
-    border: none;
-    background: transparent;
-    padding: 0;
-  }
-
-  .markdown-content :global(ul),
-  .markdown-content :global(ol) {
-    margin: 0.45rem 0 0;
-    padding-left: 1.2rem;
-  }
-
-  .markdown-content :global(a) {
-    color: inherit;
-    text-decoration: underline;
-  }
-
-  .message-row.sent .message-bubble {
-    background: linear-gradient(
-      135deg,
-      rgba(67, 56, 202, 0.9),
-      rgba(79, 70, 229, 0.86)
-    );
-    color: #eef2ff;
-    border-color: rgba(129, 140, 248, 0.55);
-  }
-
-  .message-row.sent:has(.status-indicator:not(.failed)) .message-bubble {
-    background: rgba(30, 41, 59, 0.8);
-    border-color: rgba(148, 163, 184, 0.3);
-    color: var(--text-secondary);
-  }
-
-  .message-row.sent:has(.status-indicator.failed) .message-bubble {
-    background: rgba(153, 27, 27, 0.4);
-    border-color: rgba(220, 38, 38, 0.5);
-  }
-
-  .reply-reference {
-    display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    border-left: 2px solid rgba(129, 140, 248, 0.55);
-    padding: 4px 8px;
-    border-radius: 8px;
-    background: rgba(15, 23, 42, 0.35);
-  }
-
-  .reply-pill {
-    font-weight: 700;
-    color: rgba(199, 210, 254, 0.95);
-  }
-
-  .reply-content {
-    color: rgba(224, 231, 255, 0.82);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .message-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .message-time {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .message-row.sent .message-time {
-    color: rgba(255, 255, 255, 0.5);
-  }
-
-  .message-reactions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .reaction-chip {
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: rgba(15, 23, 42, 0.5);
-    border-radius: 999px;
-    padding: 3px 8px;
-    font-size: 13px;
-    line-height: 1.2;
-    cursor: pointer;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease;
-    user-select: none;
-    color: inherit;
-    outline: none;
-  }
-
-  .reaction-chip:hover {
-    background: rgba(30, 41, 59, 0.7);
-  }
-
-  .reaction-chip.by-me {
-    background: rgba(59, 130, 246, 0.25);
-    border-color: rgba(59, 130, 246, 0.5);
-  }
-
-  .reaction-chip.by-me:hover {
-    background: rgba(59, 130, 246, 0.35);
-  }
-
-  .reaction-count {
-    margin-left: 2px;
-    font-size: 11px;
-    opacity: 0.8;
-  }
-
-  .status {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.65);
-  }
-
-  .status-indicator {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-  }
-
-  .failed-actions {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    font-size: 11px;
-  }
-
-  .failed-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--danger);
-    cursor: pointer;
-    font-weight: 600;
-  }
-
-  .failed-btn:hover {
-    text-decoration: underline;
-  }
-
-  .failed-divider {
-    color: rgba(255, 255, 255, 0.3);
-  }
-
-  .message-actions {
-    position: absolute;
-    top: -18px;
-    z-index: 100;
-    display: flex;
-    gap: 6px;
-    background: rgba(15, 23, 42, 0.85);
-    padding: 4px;
-    border-radius: 8px;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(8px);
-  }
-
-  .message-row:not(.sent) .message-actions {
-    left: 10px;
-  }
-
-  .message-row.sent .message-actions {
-    right: 10px;
-  }
-
-  .action-btn {
-    border: none;
-    background: transparent;
-    color: rgba(226, 232, 240, 0.92);
-    border-radius: 4px;
-    font-size: 12px;
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all var(--transition);
-  }
-
-  .action-btn:hover {
-    background: rgba(148, 163, 184, 0.2);
-  }
-
-  .reaction-wrapper {
-    position: relative;
-    display: flex;
-  }
-
-  .reaction-picker {
-    position: absolute;
-    bottom: 100%;
-    margin-bottom: 6px;
-    background: rgba(15, 23, 42, 0.95);
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(8px);
-    border-radius: 12px;
-    display: flex;
-    padding: 6px;
-    gap: 4px;
-    z-index: 110;
-  }
-
-  .message-row.sent .reaction-picker {
-    right: -10px;
-  }
-
-  .message-row:not(.sent) .reaction-picker {
-    left: -10px;
-  }
-
-  .message-content-inner {
-    display: inline;
-  }
-
-  .message-content-inner :global(p:last-child) {
-    display: inline;
-    margin-bottom: 0;
-  }
-
-  .file-offer-bubble {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    min-width: 250px;
-    max-width: 320px;
-  }
-
-  .file-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-sm);
-    color: var(--accent);
-  }
-
-  .file-details {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .file-name {
-    font-weight: 500;
-    font-size: 0.95rem;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-  }
-
-  .file-size {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-  }
-
-  .file-progress-wrap {
-    margin-top: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .file-progress-bar {
-    flex: 1;
-    height: 6px;
-    background: rgba(148, 163, 184, 0.2);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .file-progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #2563eb, #38bdf8);
-    transition: width 120ms linear;
-  }
-
-  .file-progress-label {
-    min-width: 34px;
-    text-align: right;
-    font-size: 0.72rem;
-    color: var(--text-muted);
-  }
-
-  .file-download-btn {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition:
-      background var(--transition),
-      transform 0.1s ease;
-  }
-
-  .file-download-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .file-download-btn:disabled {
-    opacity: 0.65;
-    cursor: not-allowed;
-  }
-
-  .file-download-btn:active {
-    transform: scale(0.95);
-  }
-
-  .file-offer-state {
-    font-size: 0.78rem;
-    font-weight: 600;
-  }
-
-  .file-offer-state.accepted {
-    color: #34d399;
-  }
-
-  .reaction-emoji-btn {
-    background: transparent;
-    border: none;
-    font-size: 18px;
-    cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 6px;
-    transition:
-      transform 0.15s ease-out,
-      background 0.15s;
-  }
-
-  .reaction-emoji-btn:hover {
-    transform: scale(1.2);
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .input-area {
-    padding: 14px 16px;
-    background: linear-gradient(
-      180deg,
-      rgba(30, 41, 59, 0.82),
-      rgba(15, 23, 42, 0.95)
-    );
-    border-top: 1px solid var(--border);
-    display: grid;
-    grid-template-columns: auto 1fr auto;
     gap: 10px;
-    align-items: end;
-    position: relative;
+    color: var(--text-muted);
+    padding: 40px 24px;
+  }
+  .empty-chat h3 {
+    font-size: 20px;
+    color: var(--text-primary);
+    margin: 4px 0 0;
+    font-weight: 600;
+  }
+  .empty-chat p {
+    font-size: 13px;
+    margin: 0;
+    max-width: 280px;
+    line-height: 1.5;
+  }
+  .empty-verify {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 14px;
+    background: rgba(251, 191, 36, 0.12);
+    color: var(--warning);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background var(--transition);
+  }
+  .empty-verify:hover {
+    background: rgba(251, 191, 36, 0.22);
   }
 
-  .attach-button {
-    background: none;
-    border: none;
-    color: var(--text-light);
-    cursor: pointer;
-    padding: 10px 8px;
+  .msg-group {
+    margin-top: 6px;
+  }
+  .msg-group + .msg-group {
+    margin-top: 10px;
+  }
+
+  .time-separator {
+    text-align: center;
+    margin: 18px 0 8px;
+    position: sticky;
+    top: 4px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .time-separator span {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(17, 24, 39, 0.9);
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .group-body {
+    display: flex;
+    gap: 8px;
+    max-width: 100%;
+    align-items: flex-end;
+  }
+  .group-body.sent {
+    justify-content: flex-end;
+  }
+
+  .group-avatar {
+    flex-shrink: 0;
+    align-self: flex-end;
+    margin-bottom: 2px;
+    position: sticky;
+    bottom: 4px;
+    z-index: 1;
+  }
+
+  .group-messages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-width: min(72%, 620px);
+    min-width: 0;
+  }
+  .group-messages.sent {
+    align-items: flex-end;
+  }
+
+  .scroll-to-bottom {
+    position: absolute;
+    right: 16px;
+    bottom: calc(var(--composer-height, 64px) + 12px);
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition:
-      color var(--transition),
-      background var(--transition);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    transition: all var(--transition);
+    z-index: 15;
+    animation: fadeInFab 0.18s ease;
   }
-
-  .attach-button:hover:not(:disabled) {
-    color: var(--text);
+  .scroll-to-bottom:hover {
+    background: var(--bg-hover);
+    transform: translateY(-1px);
   }
-
-  .attach-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .scroll-to-bottom:active {
+    transform: translateY(0);
   }
-
-  .unread-banner {
-    position: absolute;
-    top: -46px;
-    right: 24px;
-    background: var(--accent);
-    color: #fff;
-    padding: 6px 14px;
-    border-radius: 999px;
-    font-size: 13px;
-    font-weight: 600;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    animation: slideUp 0.2s ease-out;
-    z-index: 10;
-  }
-
-  @keyframes slideUp {
+  @keyframes fadeInFab {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
-
-  .replying-banner {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 10px;
-    align-items: center;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(129, 140, 248, 0.35);
-    border-radius: 12px;
-    padding: 8px 10px;
-  }
-
-  .replying-label {
-    font-size: 12px;
+  .scroll-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
     font-weight: 700;
-    color: rgba(199, 210, 254, 0.9);
-  }
-
-  .replying-preview {
-    font-size: 12px;
-    color: rgba(226, 232, 240, 0.82);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .reply-cancel {
-    background: transparent;
-    border: 1px solid rgba(248, 113, 113, 0.42);
-    color: rgba(252, 165, 165, 0.95);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 4px 10px;
-    cursor: pointer;
-  }
-
-  textarea {
-    width: 100%;
-    background: rgba(15, 23, 42, 0.9);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    color: var(--text-primary);
-    padding: 12px 13px;
-    resize: none;
-    min-height: 44px;
-    max-height: 170px;
-    font-size: 14px;
-  }
-
-  textarea:focus {
-    outline: none;
-    border-color: rgba(129, 140, 248, 0.68);
-    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.24);
-  }
-
-  textarea:disabled {
-    opacity: 0.5;
-  }
-
-  .send-button {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 42px;
-    height: 42px;
-  }
-
-  .send-button button {
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(135deg, #6366f1, #7c83f6);
-    color: #eef2ff;
-    border-radius: 12px;
-    cursor: pointer;
-    transition:
-      transform var(--transition),
-      filter var(--transition);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .send-button button:hover:not(:disabled) {
-    filter: brightness(1.05);
-    transform: translateY(-1px);
-  }
-
-  .blocked-message {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 16px;
-    width: 100%;
-    grid-column: 1 / -1;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 14px;
-    background: rgba(15, 23, 42, 0.5);
-    border-radius: var(--radius-md);
-  }
-
-  .unblock-btn {
-    background: rgba(129, 140, 248, 0.1);
-    color: var(--accent);
-    padding: 6px 12px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    font-weight: 600;
-    transition: background 0.2s;
-  }
-
-  .unblock-btn:hover {
-    background: rgba(129, 140, 248, 0.2);
-  }
-
-  .send-button button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+    border: 2px solid var(--bg-primary);
   }
 
   .loading {
@@ -1820,13 +1268,89 @@
     justify-content: center;
   }
 
-  @media (max-width: 900px) {
-    .message-bubble {
-      max-width: 90vw;
-    }
+  .unread-separator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0 6px;
+    color: var(--danger);
+  }
+  .unread-separator::before,
+  .unread-separator::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.5;
+  }
+  .unread-separator span {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
 
-    .message-actions {
+  .emoji-picker-layer {
+    position: fixed;
+    z-index: 250;
+    animation: pickerFadeIn 0.12s ease;
+  }
+  @keyframes pickerFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
       opacity: 1;
+    }
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 220;
+    pointer-events: none;
+    animation: fadeIn 0.12s ease;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .drop-overlay-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 28px 40px;
+    border: 2px dashed var(--accent);
+    border-radius: var(--radius-lg);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  @media (max-width: 768px) {
+    .messages {
+      padding: 12px 10px 4px;
+    }
+    .group-messages {
+      max-width: 82%;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .group-messages {
+      max-width: 86%;
     }
   }
 </style>

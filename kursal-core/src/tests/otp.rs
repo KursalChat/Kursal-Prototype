@@ -1,5 +1,6 @@
 use crate::crypto::stream::stream_decrypt;
 use crate::first_contact::ContactResponse;
+use crate::messaging::enums::MessageId;
 use crate::storage::{get_dilithium_pub, get_timestamp_secs};
 use crate::tests::CACHE_DIR;
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
         messages::{message_receive, message_send},
         session_initiate,
     },
-    first_contact::otp::{handle_otp_response, otp_to_keys},
+    first_contact::{handle_fc_response, otp::otp_to_keys},
     identity::generators::{generate_dilithium_keypair, generate_identity_keypair},
     storage::{Database, SharedDatabase, TABLE_SETTINGS},
 };
@@ -55,6 +56,7 @@ async fn otp_full_session_roundtrip() {
 
     // Simulate the encrypted payload Alice would publish to DHT
     let payload = crate::first_contact::otp::OtpPayload {
+        payload_id: MessageId::new(),
         pre_key_bundle: alice_bundle_bytes,
         peer_id: "alice_peer_id".to_string(),
         dilithium_pub_key: get_dilithium_pub(&*alice.0.lock().await).unwrap(),
@@ -103,10 +105,10 @@ async fn otp_response_ignored_after_consumed() {
     let db = make_peer("otp_consumed").await;
     let bob = make_peer("otp_consumed_bob").await;
 
-    // Set otp_pending = true
+    let payload_id = MessageId::new();
     db.0.lock()
         .await
-        .raw_write(TABLE_SETTINGS, "otp_pending", &[1u8])
+        .raw_write(TABLE_SETTINGS, "otp_pending_id", &payload_id.0)
         .unwrap();
 
     let now = get_timestamp_secs().unwrap();
@@ -120,6 +122,7 @@ async fn otp_response_ignored_after_consumed() {
         .await
         .unwrap();
     let response = ContactResponse {
+        payload_id,
         pre_key_bundle: bob_bundle.serialize().unwrap(),
         peer_id: "bob_peer_id".to_string(),
         dilithium_pub_key: get_dilithium_pub(&*bob.0.lock().await).unwrap(),
@@ -129,12 +132,12 @@ async fn otp_response_ignored_after_consumed() {
     // First call succeeds
     let (cmd_tx, _cmd_rx) = mpsc::channel(8);
     let (event_tx, _event_rx) = mpsc::channel(8);
-    handle_otp_response(response.clone(), db.clone(), &cmd_tx, &event_tx)
+    handle_fc_response(response.clone(), db.clone(), &cmd_tx, &event_tx)
         .await
         .unwrap();
 
     // Second call should be silently ignored — otp_pending is now false
-    let result = handle_otp_response(response, db.clone(), &cmd_tx, &event_tx).await;
+    let result = handle_fc_response(response, db.clone(), &cmd_tx, &event_tx).await;
     assert!(result.is_ok());
 }
 
@@ -144,12 +147,13 @@ async fn otp_response_rejected_after_expiry() {
     let db = make_peer("otp_expiry").await;
     let bob = make_peer("otp_expiry_bob").await;
 
-    // Set otp_pending = true but published 11 minutes ago
+    // OTP pending but published 11 minutes ago
     let fake_past = get_timestamp_secs().unwrap() - 660; // 11 minutes ago
+    let payload_id = MessageId::new();
 
     db.0.lock()
         .await
-        .raw_write(TABLE_SETTINGS, "otp_pending", &[1u8])
+        .raw_write(TABLE_SETTINGS, "otp_pending_id", &payload_id.0)
         .unwrap();
     db.0.lock()
         .await
@@ -160,6 +164,7 @@ async fn otp_response_rejected_after_expiry() {
         .await
         .unwrap();
     let response = ContactResponse {
+        payload_id,
         pre_key_bundle: bob_bundle.serialize().unwrap(),
         peer_id: "bob_peer_id".to_string(),
         dilithium_pub_key: get_dilithium_pub(&*bob.0.lock().await).unwrap(),
@@ -167,6 +172,6 @@ async fn otp_response_rejected_after_expiry() {
     };
     let (cmd_tx, _cmd_rx) = mpsc::channel(8);
     let (event_tx, _event_rx) = mpsc::channel(8);
-    let result = handle_otp_response(response, db.clone(), &cmd_tx, &event_tx).await;
+    let result = handle_fc_response(response, db.clone(), &cmd_tx, &event_tx).await;
     assert!(result.is_ok()); // silently ignored... cant actually really test that lol
 }

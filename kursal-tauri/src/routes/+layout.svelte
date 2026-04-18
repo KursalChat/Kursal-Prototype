@@ -7,6 +7,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { nearbyState } from "$lib/state/nearby.svelte";
+  import { typingState } from "$lib/state/typing.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
   import { finalizeDeferredReceiveTarget } from "$lib/utils/file-transfer-paths";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
@@ -21,6 +22,7 @@
     FileOfferedPayload,
     FileTransferProgressPayload,
     FileReceivedPayload,
+    TypingIndicatorPayload,
   } from "$lib/types";
 
   let { children } = $props();
@@ -45,7 +47,7 @@
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     const onboarded = localStorage.getItem("kursal_onboarded");
-    if (onboarded !== "true" && $page.url.pathname !== "/onboarding") {
+    if (onboarded !== "done" && $page.url.pathname !== "/onboarding") {
       goto("/onboarding", { replaceState: true });
     }
 
@@ -67,6 +69,8 @@
         const payload = event.payload;
         payload.timestamp = payload.timestamp * 1000; // Rust gives seconds, UI expects ms
         messagesState.append(payload);
+        typingState.clear(payload.contactId);
+        messagesState.setFirstUnread(payload.contactId, payload.id);
         if (document.hidden) {
           backgroundUnread += 1;
           refreshTitle();
@@ -253,6 +257,7 @@
             sizeBytes: payload.sizeBytes,
           },
         });
+        messagesState.setFirstUnread(payload.contactId, payload.offerId);
       }),
     );
 
@@ -294,6 +299,13 @@
           event.payload.peerId,
           event.payload.sessionName,
         );
+      }),
+    );
+
+    // Listen to typing_indicator event
+    unlistenPromises.push(
+      listen<TypingIndicatorPayload>("typing_indicator", (event) => {
+        typingState.set(event.payload.contactId, event.payload.replyTo ?? null);
       }),
     );
 

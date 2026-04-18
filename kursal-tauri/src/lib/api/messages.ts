@@ -25,6 +25,9 @@ export const sendFileOffer = (contactId: string, filePath: string): Promise<[str
 export const acceptFileOffer = (contactId: string, offerId: string, savePath: string): Promise<void> =>
   invoke('accept_file_offer', { contactId, offerId, savePath });
 
+export const sendTypingIndicator = (contactId: string, replyTo: string | null = null): Promise<void> =>
+  invoke('send_typing_indicator', { contactId, replyTo });
+
 export const getMessages = async (
   contactId: string,
   limit = 100,

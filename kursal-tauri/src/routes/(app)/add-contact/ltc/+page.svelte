@@ -181,7 +181,10 @@
         return;
       }
     } catch (err) {
-      console.warn("Dialog picker unavailable, falling back to HTML input", err);
+      console.warn(
+        "Dialog picker unavailable, falling back to HTML input",
+        err,
+      );
     }
 
     fileInput?.click();
@@ -240,11 +243,12 @@
       <div class="heading-row">
         <div>
           <h3>Create contact file</h3>
-          <p class="subtle">You will choose where to save it.</p>
         </div>
       </div>
 
-      <p class="explanation">Generate a .kursal file for long term sharing.</p>
+      <p class="explanation">
+        Generate a .kursal file for long term, multi-contact sharing.
+      </p>
 
       <Button variant="primary" loading={exporting} onclick={handleExport}>
         <Download size={14} />
@@ -255,7 +259,10 @@
         <ShieldAlert size={16} />
         <div>
           <strong>Keep this file private.</strong>
-          <p>Anyone with it can request a secure session until it expires.</p>
+          <p>
+            Anyone with it can request a secure session until it expires or
+            regenerate one.
+          </p>
         </div>
       </div>
     </section>

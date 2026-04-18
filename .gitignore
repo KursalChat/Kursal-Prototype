@@ -22,8 +22,10 @@ kursal-cli/relay_identity.key
 # kursal-tauri
 kursal-tauri/src-tauri/gen/schemas
 kursal-tauri/src-tauri/gen/android/keystore.properties
+kursal-tauri/src_backup
 
 # temporary
 PLAN.md
 CLAUDE.md
+.claude/
 externals/web-previous

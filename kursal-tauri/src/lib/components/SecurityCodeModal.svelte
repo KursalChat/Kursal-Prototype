@@ -5,7 +5,11 @@
   import { notifications } from '$lib/state/notifications.svelte';
   import Button from './Button.svelte';
 
-  let { contactId, onClose }: { contactId: string; onClose: () => void } = $props();
+  let {
+    contactId,
+    onClose,
+    contactVerified = false,
+  }: { contactId: string; onClose: () => void; contactVerified?: boolean } = $props();
 
   let code = $state<string | null>(null);
   let loading = $state(false);
@@ -97,11 +101,14 @@
         Copy Code
       </Button>
 
-      <Button variant="primary" loading={confirming} onclick={handleConfirm}>
-        Confirm — codes match
-      </Button>
-
-      <button class="link" onclick={onClose}>Do this later</button>
+      {#if contactVerified}
+        <Button variant="primary" onclick={onClose}>Close</Button>
+      {:else}
+        <Button variant="primary" loading={confirming} onclick={handleConfirm}>
+          Confirm — codes match
+        </Button>
+        <button class="link" onclick={onClose}>Do this later</button>
+      {/if}
     {/if}
   </div>
 </div>

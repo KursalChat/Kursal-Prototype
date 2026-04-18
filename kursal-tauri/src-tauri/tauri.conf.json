@@ -16,8 +16,8 @@
         "width": 1024,
         "height": 768,
         "center": true,
-        "minWidth": 800,
-        "minHeight": 600,
+        "minWidth": 500,
+        "minHeight": 300,
         "userAgent": "KursalChat/0.1.0",
         "zoomHotkeysEnabled": false
       }
@@ -41,8 +41,7 @@
     "category": "public.app-category.social-networking",
     "macOS": {
       "entitlements": "entitlements.mac.plist",
-      "minimumSystemVersion": "14.0",
-      "signingIdentity": "kursal"
+      "minimumSystemVersion": "14.0"
     },
     "shortDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control.",
     "longDescription": "Peer-to-peer, end-to-end encrypted messaging that puts you in control. No servers. No tracking. Just your private conversations.",

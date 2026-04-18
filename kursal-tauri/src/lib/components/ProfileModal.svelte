@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { X, Trash2, Ban } from "lucide-svelte";
+  import { X, Trash2, Ban, Shield, Copy } from "lucide-svelte";
   import Avatar from "./Avatar.svelte";
+  import SecurityCodeModal from "./SecurityCodeModal.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
   import { contactsState } from "$lib/state/contacts.svelte";
   import type { ContactResponse } from "$lib/types";
@@ -11,6 +12,18 @@
     contact,
     onClose,
   }: { contact: ContactResponse | null; onClose: () => void } = $props();
+
+  let showSecurityModal = $state(false);
+
+  async function copyUserId() {
+    if (!contact) return;
+    try {
+      await navigator.clipboard.writeText(contact.userId);
+      notifications.push("User ID copied", "success");
+    } catch (e) {
+      console.error("Copy failed", e);
+    }
+  }
 
   async function handleToggleBlock() {
     if (!contact) return;
@@ -83,10 +96,23 @@
       <div class="profile-content">
         <Avatar name={contact.displayName} src={contact.avatarBase64} size={84} />
         <h2>{contact.displayName}</h2>
-        <p class="peer-id">{contact.userId}</p>
+
+        <div class="user-id-card">
+          <div class="user-id-row">
+            <span class="user-id-label">User ID</span>
+            <button class="copy-btn" onclick={copyUserId} title="Copy User ID">
+              <Copy size={13} />
+            </button>
+          </div>
+          <code class="user-id-value">{contact.userId}</code>
+        </div>
       </div>
-    
+
       <div class="actions">
+        <button class="secondary-btn" onclick={() => (showSecurityModal = true)}>
+          <Shield size={16} />
+          {contact.verified ? "View Security Code" : "Verify Security Code"}
+        </button>
         <button class="danger-btn block-btn" onclick={handleToggleBlock}>
           <Ban size={16} />
           {contact.blocked ? "Unblock Contact" : "Block Contact"}
@@ -99,6 +125,14 @@
     {/if}
   </div>
 </div>
+
+{#if showSecurityModal && contact}
+  <SecurityCodeModal
+    contactId={contact.userId}
+    contactVerified={contact.verified}
+    onClose={() => (showSecurityModal = false)}
+  />
+{/if}
 
 <style>
   .modal-backdrop {
@@ -151,12 +185,74 @@
     margin: 0;
   }
 
-  .peer-id {
-    font-size: 13px;
+  .user-id-card {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+  }
+
+  .user-id-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .user-id-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-muted);
+  }
+
+  .copy-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: 6px;
+    transition: all var(--transition);
+  }
+
+  .copy-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .user-id-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
     word-break: break-all;
-    max-width: 100%;
-    margin: 0;
+    line-height: 1.4;
+  }
+
+  .secondary-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    font-weight: 600;
+    transition: background var(--transition);
+  }
+
+  .secondary-btn:hover {
+    background: var(--bg-hover);
   }
 
   .actions {

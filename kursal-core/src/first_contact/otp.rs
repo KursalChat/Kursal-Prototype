@@ -1,6 +1,5 @@
 use crate::{
     KursalError, Result,
-    api::AppEvent,
     contacts::Contact,
     crypto::{
         PreKeyBundleData, session_initiate,
@@ -8,14 +7,13 @@ use crate::{
     },
     first_contact::{ContactResponse, WireMessage, make_username},
     identity::UserId,
+    messaging::enums::MessageId,
     network::{
         NetworkManager,
         dht::DHTRecord,
         swarm::{SwarmCommand, get_listen_addrs, str_to_multiaddr},
     },
-    storage::{
-        SharedDatabase, TABLE_LTC_CACHE, TABLE_SETTINGS, get_dilithium_pub, get_timestamp_secs,
-    },
+    storage::{SharedDatabase, TABLE_SETTINGS, get_dilithium_pub, get_timestamp_secs},
 };
 use argon2::{Argon2, ParamsBuilder};
 use libp2p::PeerId;
@@ -82,6 +80,7 @@ pub fn otp_to_keys(otp: &str) -> Result<([u8; 32], [u8; 32])> {
 
 #[derive(Serialize, Deserialize)]
 pub struct OtpPayload {
+    pub payload_id: MessageId,
     pub pre_key_bundle: Vec<u8>,
     pub peer_id: String,
     pub dilithium_pub_key: Vec<u8>,
@@ -102,6 +101,7 @@ pub async fn build_otp_payload(
     db: SharedDatabase,
     network: &NetworkManager,
     enc_key: &[u8; 32],
+    payload_id: MessageId,
 ) -> Result<Vec<u8>> {
     let bundle = PreKeyBundleData::build_pre_key_bundle(db.clone())
         .await?
@@ -110,6 +110,7 @@ pub async fn build_otp_payload(
     let dilithium_pub_key = get_dilithium_pub(&*db.0.lock().await)?;
 
     let payload = OtpPayload {
+        payload_id,
         pre_key_bundle: bundle,
         peer_id,
         dilithium_pub_key,
@@ -122,9 +123,10 @@ pub async fn build_otp_payload(
 // TODO: publish from new identity + decoys
 pub async fn publish_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) -> Result<()> {
     let timestamp = get_timestamp_secs()?;
+    let payload_id = MessageId::new();
 
     let (enc_key, dht_key) = otp_to_keys(otp)?;
-    let payload = build_otp_payload(db.clone(), network, &enc_key).await?;
+    let payload = build_otp_payload(db.clone(), network, &enc_key, payload_id).await?;
 
     let secret_key_bytes =
         db.0.lock()
@@ -147,7 +149,7 @@ pub async fn publish_otp(otp: &str, db: SharedDatabase, network: &NetworkManager
     {
         let db_lock = db.0.lock().await;
         db_lock.raw_write(TABLE_SETTINGS, "otp_published_at", &timestamp.to_be_bytes())?;
-        db_lock.raw_write(TABLE_SETTINGS, "otp_pending", &[1u8])?;
+        db_lock.raw_write(TABLE_SETTINGS, "otp_pending_id", &payload_id.0)?;
     }
 
     Ok(())
@@ -239,6 +241,7 @@ pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) 
 
     let my_bundle = PreKeyBundleData::build_pre_key_bundle(db.clone()).await?;
     let response = ContactResponse {
+        payload_id: payload.payload_id,
         pre_key_bundle: my_bundle.serialize()?,
         peer_id: network.primary.peer_id.to_base58(),
         dilithium_pub_key,
@@ -264,93 +267,4 @@ pub async fn fetch_otp(otp: &str, db: SharedDatabase, network: &NetworkManager) 
 
     contact.save(&*db.0.lock().await)?;
     Ok(contact)
-}
-
-pub async fn handle_otp_response(
-    response: ContactResponse,
-    db: SharedDatabase,
-    cmd_tx: &mpsc::Sender<SwarmCommand>,
-    event_tx: &mpsc::Sender<AppEvent>,
-) -> Result<()> {
-    let now = get_timestamp_secs()?;
-
-    // Check if OTP handshake is pending
-    let (otp_pending, otp_valid) = {
-        let db_lock = db.0.lock().await;
-        let pending = db_lock
-            .raw_read(TABLE_SETTINGS, "otp_pending")?
-            .map(|b| b.first() == Some(&1))
-            .unwrap_or(false);
-
-        let published_at: u64 = db_lock
-            .raw_read(TABLE_SETTINGS, "otp_published_at")?
-            .and_then(|b| b.try_into().ok().map(u64::from_be_bytes))
-            .unwrap_or(0);
-
-        (pending, now.saturating_sub(published_at) <= 600)
-    };
-
-    // Check if LTC handshake is pending
-    let ltc_valid = {
-        let db_lock = db.0.lock().await;
-        if let Ok(Some(bytes)) = db_lock.raw_read(TABLE_LTC_CACHE, "ltc_current_expiry") {
-            if bytes.len() == 8 {
-                let expiry = u64::from_be_bytes(bytes.try_into().unwrap());
-                now <= expiry
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    };
-
-    if !(ltc_valid || otp_pending && otp_valid) {
-        log::warn!("Rejected incoming ContactResponse: neither OTP nor LTC is pending or valid");
-        return Ok(()); // silent ignore
-    }
-
-    let bundle = PreKeyBundleData::deserialize(&response.pre_key_bundle)?;
-    let identity_key_bytes = bundle.identity_key.serialize().to_vec();
-
-    let user_id = UserId(Sha256::digest(&identity_key_bytes).into());
-    let bob_address = ProtocolAddress::new(hex::encode(user_id.0), DeviceId::new(1u8).unwrap());
-    session_initiate(db.clone(), bundle, &bob_address).await?;
-
-    let contact = Contact {
-        user_id,
-        peer_id: response.peer_id.clone(),
-        display_name: make_username(&response.peer_id),
-        avatar_bytes: None,
-        identity_pub_key: identity_key_bytes,
-        dilithium_pub_key: response.dilithium_pub_key,
-        known_addresses: response.relay_addresses,
-        verified: false,
-        profile_shared: false,
-        blocked: false,
-        created_at: now,
-    };
-
-    {
-        let db_lock = db.0.lock().await;
-        contact.save(&db_lock)?;
-        if otp_pending {
-            // FIXME: if LTC is used and OTP is pending it will still clear OTP
-            db_lock.raw_write(TABLE_SETTINGS, "otp_pending", &[0u8])?;
-        }
-    }
-
-    cmd_tx
-        .send(SwarmCommand::ContactAdded {
-            contact: contact.clone(),
-        })
-        .await
-        .map_err(|err| KursalError::Network(err.to_string()))?;
-
-    event_tx
-        .send(AppEvent::ContactAdded { contact })
-        .await
-        .map_err(|err| KursalError::Network(err.to_string()))?;
-
-    Ok(())
 }

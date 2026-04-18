@@ -627,6 +627,24 @@ pub fn set_relay_server_enabled(db: &Database, value: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn api_server_enabled(db: &Database) -> Result<bool> {
+    let a = db
+        .raw_read(TABLE_SETTINGS, "api_server_enabled")?
+        .unwrap_or(vec![0u8]);
+
+    Ok(a == vec![1u8])
+}
+
+pub fn set_api_server_enabled(db: &Database, value: bool) -> Result<()> {
+    db.raw_write(
+        TABLE_SETTINGS,
+        "api_server_enabled",
+        if value { &[1u8] } else { &[0u8] },
+    )?;
+
+    Ok(())
+}
+
 pub fn get_local_profile(db: &Database) -> Result<(String, Option<Vec<u8>>)> {
     let username = std::str::from_utf8(
         &db.raw_read(TABLE_SETTINGS, "local_profile_username")?

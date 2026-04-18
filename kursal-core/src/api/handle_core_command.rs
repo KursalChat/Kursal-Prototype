@@ -75,32 +75,37 @@ pub async fn handle_core_command(
         CoreCommand::ConnectNearby {
             peer_id,
             session_name,
+            method,
             reply,
         } => {
-            let (transport, cmd_tx) = {
+            let (mdns_transport, bt_transport, cmd_tx) = {
                 let net = network.lock().await;
-                let transport = match net.mdns_transport.clone() {
-                    Some(t) => t,
-                    None => {
-                        reply
-                            .send(Err(KursalError::Network("Nearby share not active".into())))
-                            .ok();
-                        return;
-                    }
-                };
                 let cmd_tx = net.primary.cmd_tx.clone();
-                (transport, cmd_tx)
+
+                (net.mdns_transport.clone(), net.bt_transport.clone(), cmd_tx)
             };
 
-            let result = nearby_connect(
-                &peer_id,
-                &session_name,
-                transport.as_ref(),
-                db,
-                &app_event_tx,
-                &cmd_tx,
-            )
-            .await;
+            let result = if method == "mdns" {
+                nearby_connect(
+                    &peer_id,
+                    &session_name,
+                    &*mdns_transport,
+                    db,
+                    &app_event_tx,
+                    &cmd_tx,
+                )
+                .await
+            } else {
+                nearby_connect(
+                    &peer_id,
+                    &session_name,
+                    &*bt_transport,
+                    db,
+                    &app_event_tx,
+                    &cmd_tx,
+                )
+                .await
+            };
             reply.send(result).ok();
         }
 
@@ -135,6 +140,28 @@ pub async fn handle_core_command(
                     .expect("Text message always has an id");
 
                 Ok(msg_id)
+            }
+            .await;
+
+            reply.send(result).ok();
+        }
+
+        CoreCommand::SendTypingIndicator { contact_id, reply } => {
+            let result = async {
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|e| KursalError::Crypto(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".into()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
+                    .ok_or_else(|| KursalError::Storage("Contact not found".into()))?;
+
+                let msg = KursalMessage::Typing;
+                let cmd_tx = network.lock().await.primary.cmd_tx.clone();
+
+                send_message(msg, &contact, db, &cmd_tx).await?;
+
+                Ok(())
             }
             .await;
 

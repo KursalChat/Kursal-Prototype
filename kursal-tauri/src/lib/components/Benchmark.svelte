@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen } from "@tauri-apps/api/event";
-  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import {
     runOtpBenchmark,
     cancelBenchmark,

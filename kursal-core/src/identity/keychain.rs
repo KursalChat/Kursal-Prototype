@@ -1,7 +1,7 @@
 use crate::{KursalError, Result};
-use keyring_core::Entry;
+use keyring_core::{Entry, set_default_store};
 use rand::{TryRngCore, rngs::OsRng};
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 pub struct KeychainConfig {
     pub storage_id: String,
@@ -11,19 +11,61 @@ pub struct KeychainConfig {
 const MASTER_SECRET_LEN: usize = 32;
 
 pub fn init_keychain() -> Result<()> {
+    let config = &HashMap::new();
+
     #[cfg(target_os = "android")]
-    keyring::use_named_store("android").map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use android_native_keyring_store::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
+        );
+    }
+
     #[cfg(target_os = "macos")]
-    keyring::use_named_store("keychain").map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use apple_native_keyring_store::keychain::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
+        );
+    }
+
     #[cfg(target_os = "ios")]
-    keyring::use_named_store("protected").map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use apple_native_keyring_store::protected::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string())),
+        );
+    }
+
     #[cfg(target_os = "windows")]
-    keyring::use_named_store("windows").map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use windows_native_keyring_store::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
+        );
+    }
+
     #[cfg(target_os = "linux")]
-    keyring::use_named_store("keyutils").map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use linux_keyutils_keyring_store::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
+        );
+    }
+
     #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-    keyring::use_named_store("secret-service")
-        .map_err(|err| KursalError::Storage(err.to_string()))?;
+    {
+        use dbus_secret_service_keyring_store::Store;
+        set_default_store(
+            Store::new_with_configuration(config)
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
+        );
+    }
 
     Ok(())
 }

@@ -60,7 +60,9 @@ Here's a list of features we'd like to implement, which you can also find on our
 
 © KursalChat - 2026
 
-Distributed under the **AGPL-3.0** License. See [LICENSE](LICENSE) for more information.
+Code distributed under the **AGPL-3.0** License. See [LICENSE](LICENSE) for more information.
+
+Visual assets (app icon, images, etc.) are all rights reserved.
 
 ---
 

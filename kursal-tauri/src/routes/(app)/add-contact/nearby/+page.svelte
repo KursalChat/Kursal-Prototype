@@ -4,6 +4,8 @@
   import { nearbyState } from '$lib/state/nearby.svelte';
   import { notifications } from '$lib/state/notifications.svelte';
   import Button from '$lib/components/Button.svelte';
+  import type { NearbyOrigin } from '$lib/types';
+  import { Bluetooth, Wifi } from 'lucide-svelte';
 
   let connecting = $state<Set<string>>(new Set());
   let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -51,10 +53,10 @@
     nearbyState.reset();
   });
 
-  async function handleConnect(peerId: string) {
+  async function handleConnect(peerId: string, origin: NearbyOrigin) {
     setConnecting(peerId, true);
     try {
-      await connectNearby(peerId);
+      await connectNearby(peerId, origin);
       notifications.push('Connection request sent', 'info');
     } catch (e) {
       notifications.push('Failed to connect to peer', 'error');
@@ -138,13 +140,24 @@
       <div class="empty">No devices found yet. Keep this page open on both devices.</div>
     {:else}
       <div class="row-list">
-        {#each nearbyState.peers as peer (peer.peerId)}
+        {#each nearbyState.peers as peer (`${peer.peerId}:${peer.origin}`)}
           <div class="row-item">
             <div class="row-info">
-              <p class="row-title">{peer.sessionName}</p>
+              <p class="row-title">
+                {peer.sessionName}
+                <span class="origin-badge" class:bluetooth={peer.origin === 'Bluetooth'}>
+                  {#if peer.origin === 'Bluetooth'}
+                    <Bluetooth size={11} strokeWidth={2.5} />
+                    Bluetooth
+                  {:else}
+                    <Wifi size={11} strokeWidth={2.5} />
+                    Wi-Fi
+                  {/if}
+                </span>
+              </p>
               <p class="row-subtitle">{peer.peerId.slice(0, 14)}...</p>
             </div>
-            <Button variant="primary" loading={connecting.has(peer.peerId)} onclick={() => handleConnect(peer.peerId)}>
+            <Button variant="primary" loading={connecting.has(peer.peerId)} onclick={() => handleConnect(peer.peerId, peer.origin)}>
               Connect
             </Button>
           </div>
@@ -268,6 +281,31 @@
     font-weight: 600;
     font-size: 14px;
     color: var(--text-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .origin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.14);
+    border: 1px solid rgba(129, 140, 248, 0.35);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .origin-badge.bluetooth {
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, 0.14);
+    border-color: rgba(56, 189, 248, 0.35);
   }
 
   .row-subtitle {

@@ -3,22 +3,24 @@
   let { status }: { status: ConnectionChangedPayload['status'] } = $props();
 
   const colors: Record<ConnectionChangedPayload['status'], string> = {
-    connecting:   '#faa81a',
-    relay:        '#00b4d8',
-    holepunch:    '#00b4d8',
-    direct:       '#23a559',
-    disconnected: '#4e5058',
+    connecting:   '#fbbf24',
+    relay:        '#38bdf8',
+    holepunch:    '#38bdf8',
+    direct:       '#34d399',
+    disconnected: '#64748b',
   };
 </script>
 
-<span class="dot" style="background:{colors[status] ?? colors.disconnected}"></span>
+<span class="status-dot" style="background:{colors[status] ?? colors.disconnected}"></span>
 
 <style>
-  .dot {
+  .status-dot {
     width: 10px;
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
     display: inline-block;
+    border: 2px solid var(--bg-secondary);
+    box-sizing: content-box;
   }
 </style>

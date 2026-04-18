@@ -9,6 +9,10 @@
     "core:default",
     "dialog:default",
     "fs:write-files",
+    {
+      "identifier": "fs:allow-stat",
+      "allow": [{ "path": "**" }]
+    },
     "opener:default",
     "clipboard-manager:default"
   ]

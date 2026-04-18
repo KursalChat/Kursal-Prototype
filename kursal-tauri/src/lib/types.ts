@@ -28,9 +28,12 @@ export interface OtpResponse {
   otp: string;
 }
 
+export type NearbyOrigin = 'Bluetooth' | 'mDNS';
+
 export interface NearbyPeerResponse {
   peerId: string;
   sessionName: string;
+  origin: NearbyOrigin;
 }
 
 // Tauri event payloads — mirror what the Rust AppEvent forwarder emits
@@ -80,4 +83,9 @@ export interface FileTransferProgressPayload {
 export interface FileReceivedPayload {
   contactId: string;
   savePath: string;
+}
+
+export interface TypingIndicatorPayload {
+  contactId: string;
+  replyTo: string | null;
 }

@@ -3,11 +3,11 @@ members = ["kursal-cli", "kursal-core", "kursal-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.10"
+version = "0.0.1-alpha.11"
 authors = ["Kodeur_Kubik <kubik@kursal.chat>", "Arlo <arlo@kursal.chat>"]
 edition = "2024"
 license = "AGPL-3.0-only"
-rust-version = "1.88" # lets keep it the same as libsignal
+rust-version = "1.88"                                                     # lets keep it the same as libsignal
 homepage = "https://kursal.chat"
 repository = "https://github.com/KursalChat/Kursal"
 
@@ -52,18 +52,24 @@ libp2p = { version = "0.56", features = [
     "request-response",
 ] }
 libp2p-stream = "0.4.0-alpha"
+btleplug = { version = "0.12.0", features = ["serde"] }
+ble-peripheral-rust = "0.2.0"
 
 # Storage
 redb = "4"
-keyring = "4.0.0-rc.3"
-keyring-core = "0.7"
 toml = "1"
 log4rs = { version = "1", features = ["gzip"] }
+keyring-core = "0.7"
+android-native-keyring-store = { git = "https://github.com/open-source-cooperative/android-native-keyring-store.git", branch = "next" }
+apple-native-keyring-store = { git = "https://github.com/open-source-cooperative/apple-native-keyring-store.git", branch = "next" }
+windows-native-keyring-store = { git = "https://github.com/open-source-cooperative/windows-native-keyring-store.git", branch = "next" }
+linux-keyutils-keyring-store = { git = "https://github.com/open-source-cooperative/linux-keyutils-keyring-store.git", branch = "next" }
+dbus-secret-service-keyring-store = { git = "https://github.com/open-source-cooperative/dbus-secret-service-keyring-store.git", branch = "next" }
 
 # API
 axum = "0.8"
+tower-http = "0.6"
 # tokio-tungstenite = "0.28"
-# tower-http = "0.6"
 
 # Misc
 emojis = "0.8"
@@ -169,7 +175,7 @@ prost-types = "0.14"
 protobuf = "3.7.2"
 protobuf-codegen = "3.7.2"
 quote = "1.0.38"
-rand = "0.9"
+rand = "0.9.4"
 rand_chacha = "0.9"
 rand_core = "0.9"
 rangemap = "1.5.1"
@@ -221,14 +227,6 @@ zeroize = "1.8.2"
 boring = { git = 'https://github.com/signalapp/boring', tag = "signal-v5.0.2" }
 boring-sys = { git = 'https://github.com/signalapp/boring', tag = "signal-v5.0.2" }
 curve25519-dalek = { git = 'https://github.com/signalapp/curve25519-dalek', tag = 'signal-curve25519-4.1.3' }
-
-# TODO: TEMPORARY, upgrade to stable keyring
-android-native-keyring-store = { git = "https://github.com/open-source-cooperative/android-native-keyring-store.git", branch = "next" }
-apple-native-keyring-store = { git = "https://github.com/open-source-cooperative/apple-native-keyring-store.git", branch = "next" }
-dbus-secret-service-keyring-store = { git = "https://github.com/open-source-cooperative/dbus-secret-service-keyring-store.git", branch = "next" }
-linux-keyutils-keyring-store = { git = "https://github.com/open-source-cooperative/linux-keyutils-keyring-store.git", branch = "next" }
-windows-native-keyring-store = { git = "https://github.com/open-source-cooperative/windows-native-keyring-store.git", branch = "next" }
-zbus-secret-service-keyring-store = { git = "https://github.com/open-source-cooperative/zbus-secret-service-keyring-store.git", branch = "next" }
 
 [profile.dev.package.argon2]
 opt-level = 2

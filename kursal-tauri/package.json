@@ -12,12 +12,13 @@
   "license": "MIT",
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-barcode-scanner": "~2.4.4",
     "@tauri-apps/plugin-clipboard-manager": "~2.3.2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-fs": "^2.5.0",
     "@tauri-apps/plugin-opener": "~2.5.3",
     "@tauri-apps/plugin-updater": "~2.10.1",
-    "dompurify": "^3.3.3",
+    "dompurify": "^3.4.0",
     "lucide-svelte": "^1.0.1",
     "marked": "^18.0.0",
     "qrcode": "^1.5.4"
@@ -28,7 +29,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tauri-apps/cli": "^2.10.1",
     "@types/qrcode": "^1.5.6",
-    "svelte": "^5.55.3",
+    "svelte": "^5.55.4",
     "svelte-check": "^4.4.6",
     "typescript": "~6.0.2",
     "vite": "^8.0.8"

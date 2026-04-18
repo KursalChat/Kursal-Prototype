@@ -1,157 +1,135 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import Button from "$lib/components/Button.svelte";
+  import Screen1 from "$lib/components/onboarding/Screen1.svelte";
+  import Screen2 from "$lib/components/onboarding/Screen2.svelte";
+  import Screen3 from "$lib/components/onboarding/Screen3.svelte";
+  import Screen4 from "$lib/components/onboarding/Screen4.svelte";
+  import Screen5 from "$lib/components/onboarding/Screen5.svelte";
 
-  function handleStart() {
-    localStorage.setItem("kursal_onboarded", "true");
+  let screen = $state(1);
+
+  function finish() {
+    localStorage.setItem("kursal_onboarded", "done");
     goto("/chat");
   }
 </script>
 
-<div class="container">
-  <div class="content">
-    <div class="hero">
-      <p class="eyebrow">Kursal [PROTOTYPE!]</p>
-      <h1>Private messaging without servers.</h1>
-      <p class="subheading">
-        DISCLAIMER: The interface is made by AI. Nothing else.<br />
-        Exchange messages via a transparent and resilient network, protected by encryption
-        :p
-      </p>
-      <Button variant="primary" onclick={handleStart}>Enter Kursal</Button>
-    </div>
+<div class="onboarding" class:bright={screen === 5}>
+  <div class="grain"></div>
+  <div class="glow-bg"></div>
 
-    <div class="feature-panel">
-      <div class="feature">
-        <h3>End-to-end encrypted</h3>
-        <p>Built with the Signal Protocol for strong forward secrecy.</p>
+  <div class="stage">
+    {#if screen === 1}
+      <div class="screen-wrap" data-key="1">
+        <Screen1 onNext={() => (screen = 2)} onSkip={finish} />
       </div>
-      <div class="feature">
-        <h3>No central message server</h3>
-        <p>
-          Messages go directly between peers on the network (sometimes via
-          relays).
-        </p>
+    {:else if screen === 2}
+      <div class="screen-wrap" data-key="2">
+        <Screen2 onNext={() => (screen = 3)} />
       </div>
-      <div class="feature">
-        <h3>will change this onboarding</h3>
-        <p>
-          with our friendly mascott that'll explain how kursal works under the
-          hood
-        </p>
+    {:else if screen === 3}
+      <div class="screen-wrap" data-key="3">
+        <Screen3 onNext={() => (screen = 4)} />
       </div>
-    </div>
+    {:else if screen === 4}
+      <div class="screen-wrap" data-key="4">
+        <Screen4 onNext={() => (screen = 5)} />
+      </div>
+    {:else if screen === 5}
+      <div class="screen-wrap" data-key="5">
+        <Screen5 onFinish={finish} />
+      </div>
+    {/if}
   </div>
 </div>
 
 <style>
-  .container {
-    height: 100dvh;
+  .onboarding {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(
+        ellipse at 20% 15%,
+        rgba(46, 91, 215, 0.18) 0%,
+        transparent 45%
+      ),
+      radial-gradient(
+        ellipse at 85% 85%,
+        rgba(30, 80, 229, 0.12) 0%,
+        transparent 50%
+      ),
+      #05070f;
+    overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
-    align-items: center;
+    align-items: stretch;
     justify-content: center;
-    padding: 16px;
+    transition: background 1200ms ease;
+    -webkit-overflow-scrolling: touch;
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
 
-  .content {
-    width: min(980px, 100%);
-    display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 14px;
+  .onboarding.bright {
+    background: radial-gradient(
+        ellipse at 50% 30%,
+        rgba(123, 163, 247, 0.28) 0%,
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse at 50% 90%,
+        rgba(46, 91, 215, 0.2) 0%,
+        transparent 60%
+      ),
+      #0a1026;
   }
 
-  .hero,
-  .feature-panel {
-    border-radius: 18px;
-    border: 1px solid var(--border);
-    background: linear-gradient(
-      160deg,
-      rgba(30, 41, 59, 0.7),
-      rgba(15, 23, 42, 0.78)
+  .grain {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+
+  .glow-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      circle at 50% 50%,
+      rgba(46, 91, 215, 0.08) 0%,
+      transparent 60%
     );
-    backdrop-filter: blur(12px);
-    box-shadow: var(--glow);
-    padding: 24px;
   }
 
-  .hero {
+  .stage {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+  }
+
+  .screen-wrap {
+    width: 100%;
+    min-height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    gap: 14px;
+    animation: screenFade 500ms ease-out;
   }
 
-  .eyebrow {
-    margin: 0;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--accent-hover);
+  .screen-wrap > :global(*) {
+    flex: 1;
+    min-height: 0;
   }
 
-  h1 {
-    font-size: clamp(34px, 4vw, 48px);
-    font-weight: 700;
-    margin: 0;
-    letter-spacing: -0.03em;
-    line-height: 1.05;
-  }
-
-  .subheading {
-    font-size: 16px;
-    color: var(--text-secondary);
-    margin: 0;
-    max-width: 46ch;
-  }
-
-  .feature-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .feature {
-    display: grid;
-    gap: 6px;
-    text-align: left;
-    background: rgba(15, 23, 42, 0.62);
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    padding: 12px;
-    border-radius: 10px;
-  }
-
-  .feature h3 {
-    margin: 0;
-    font-size: 14px;
-    color: var(--text-primary);
-  }
-
-  .feature p {
-    margin: 0;
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-  }
-
-  :global(.hero .button) {
-    width: fit-content;
-    min-width: 160px;
-    margin-top: 4px;
-  }
-
-  @media (max-width: 860px) {
-    .content {
-      grid-template-columns: 1fr;
-      gap: 12px;
+  @keyframes screenFade {
+    from {
+      opacity: 0;
     }
-
-    .hero,
-    .feature-panel {
-      padding: 20px;
-    }
-
-    :global(.hero .button) {
-      width: 100%;
+    to {
+      opacity: 1;
     }
   }
 </style>

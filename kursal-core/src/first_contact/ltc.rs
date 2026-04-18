@@ -4,6 +4,7 @@ use crate::{
     crypto::{PreKeyBundleData, session_initiate},
     first_contact::{ContactResponse, WireMessage, make_username},
     identity::UserId,
+    messaging::enums::MessageId,
     network::{
         NetworkManager,
         swarm::{SwarmCommand, get_listen_addrs, str_to_multiaddr},
@@ -18,6 +19,7 @@ use std::str::FromStr;
 
 #[derive(Serialize, Deserialize)]
 pub struct LtcPayload {
+    pub payload_id: MessageId,
     pub peer_id: String,
     pub pre_key_bundle: Vec<u8>, // no one-time prekey
     pub dilithium_pub_key: Vec<u8>,
@@ -35,7 +37,14 @@ impl LtcPayload {
         let created_at = get_timestamp_secs()?;
         let expires_at = created_at + 604800; // 1 week
 
+        let payload_id = MessageId::new();
+
+        db.0.lock()
+            .await
+            .raw_write(TABLE_LTC_CACHE, "ltc_current_id", &payload_id.0)?;
+
         let payload = LtcPayload {
+            payload_id,
             peer_id,
             pre_key_bundle: bundle.serialize()?,
             dilithium_pub_key,
@@ -111,6 +120,7 @@ impl LtcPayload {
 
         let my_bundle = PreKeyBundleData::build_pre_key_bundle(db.clone()).await?;
         let response = ContactResponse {
+            payload_id: self.payload_id,
             pre_key_bundle: my_bundle.serialize()?,
             peer_id: network.primary.peer_id.to_base58(),
             dilithium_pub_key,

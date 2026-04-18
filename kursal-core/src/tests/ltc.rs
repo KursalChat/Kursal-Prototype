@@ -6,6 +6,7 @@ use crate::{
     },
     first_contact::ltc::LtcPayload,
     identity::generators::{generate_dilithium_keypair, generate_identity_keypair},
+    messaging::enums::MessageId,
     storage::{Database, SharedDatabase, get_dilithium_pub, get_timestamp_secs},
     tests::CACHE_DIR,
 };
@@ -42,6 +43,7 @@ async fn ltc_full_session_roundtrip() {
     let now = get_timestamp_secs().unwrap();
 
     let ltc = LtcPayload {
+        payload_id: MessageId::new(),
         peer_id: "alice".to_string(),
         pre_key_bundle: alice_bundle.serialize().unwrap(),
         dilithium_pub_key: get_dilithium_pub(&*alice.0.lock().await).unwrap(),
@@ -85,6 +87,7 @@ async fn ltc_full_session_roundtrip() {
 fn ltc_is_expired() {
     let now = get_timestamp_secs().unwrap();
     let ltc = LtcPayload {
+        payload_id: MessageId::new(),
         peer_id: "alice".to_string(),
         pre_key_bundle: vec![],
         dilithium_pub_key: vec![],
@@ -100,6 +103,7 @@ fn ltc_is_expired() {
 fn ltc_not_expired() {
     let now = get_timestamp_secs().unwrap();
     let ltc = LtcPayload {
+        payload_id: MessageId::new(),
         peer_id: "alice".to_string(),
         pre_key_bundle: vec![],
         dilithium_pub_key: vec![],

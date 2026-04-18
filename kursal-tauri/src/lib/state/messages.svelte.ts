@@ -6,6 +6,9 @@ function createMessagesState() {
   let map = $state<Record<string, MessageResponse[]>>({});
   // keyed by contactId
   let unreadByContact = $state<Record<string, number>>({});
+  // keyed by contactId — the id of the first message that arrived while the
+  // chat wasn't being actively viewed. Used to draw a "New messages" separator.
+  let firstUnreadByContact = $state<Record<string, string>>({});
   // keyed by `${contactId}:${messageId}`
   let reactions = $state<Record<string, Array<{ emoji: string, userIds: string[] }>>>({});
   // keyed by transfer/message id
@@ -76,6 +79,7 @@ function createMessagesState() {
     if (!map[msg.contactId]) map[msg.contactId] = [];
     map[msg.contactId].push(msg);
     map[msg.contactId] = [...map[msg.contactId]];
+    if (msg.direction === "sent") clearFirstUnread(msg.contactId);
     setTimeout(() => {
       updateStatusIfSending(msg.id, msg.contactId, "failed");
     }, 15000);
@@ -149,6 +153,22 @@ function createMessagesState() {
     unreadByContact[contactId] = 0;
   }
 
+  function firstUnreadFor(contactId: string): string | null {
+    return firstUnreadByContact[contactId] ?? null;
+  }
+
+  function setFirstUnread(contactId: string, messageId: string) {
+    if (firstUnreadByContact[contactId]) return;
+    firstUnreadByContact[contactId] = messageId;
+  }
+
+  function clearFirstUnread(contactId: string) {
+    if (!firstUnreadByContact[contactId]) return;
+    const next = { ...firstUnreadByContact };
+    delete next[contactId];
+    firstUnreadByContact = next;
+  }
+
   function addReaction(messageId: string, contactId: string, emoji: string, userId: string) {
     const key = reactionKey(contactId, messageId);
     const current = reactions[key] ?? [];
@@ -211,6 +231,9 @@ function createMessagesState() {
     unreadFor,
     totalUnread,
     markRead,
+    firstUnreadFor,
+    setFirstUnread,
+    clearFirstUnread,
     addReaction,
     removeReaction,
     reactionsFor,

@@ -19,7 +19,9 @@ anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 bincode = { workspace = true }
 zeroize = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["fs"]}
+tokio = { workspace = true, features = ["fs"] }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
 async-trait = { workspace = true }
 hex = { workspace = true }
 futures = { workspace = true }
@@ -27,6 +29,7 @@ log = { workspace = true }
 log4rs = { workspace = true }
 rayon = { workspace = true }
 emojis = { workspace = true }
+subtle = { workspace = true }
 
 # Crypto
 argon2 = { workspace = true }
@@ -42,11 +45,41 @@ pqcrypto-traits = { workspace = true }
 # Network
 libp2p = { workspace = true }
 libp2p-stream = { workspace = true }
+btleplug = { workspace = true }
+ble-peripheral-rust = { workspace = true }
 
 # Storage
 redb = { workspace = true }
-keyring = { workspace = true }
 keyring-core = { workspace = true }
+
+# API
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["cors"] }
 
 [dev-dependencies]
 dirs = "6"
+
+# Keyring
+[target.'cfg(target_os = "android")'.dependencies]
+android-native-keyring-store = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { workspace = true, features = [
+    "keychain",
+    "protected",
+] }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+apple-native-keyring-store = { workspace = true, features = ["protected"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "0.5.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-keyutils-keyring-store = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+dbus-secret-service-keyring-store = { workspace = true, features = [
+    "crypto-rust",
+    "vendored",
+] }

@@ -12,6 +12,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Kursal</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -40,12 +42,99 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- Local network (mDNS nearby discovery + dev server) -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Kursal needs local network access during development to connect to the local dev server on your computer.</string>
+	<string>Kursal uses your local network to discover nearby peers for direct, encrypted peer-to-peer messaging.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_p2p._udp</string>
+		<string>_p2p._tcp</string>
+	</array>
+
+	<!-- Camera (QR/barcode contact exchange) -->
+	<key>NSCameraUsageDescription</key>
+	<string>Kursal uses the camera to scan QR codes when adding a new contact.</string>
+
+	<!-- Photos (profile avatar picker) -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kursal needs access to your photos so you can pick a profile picture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Kursal may save received images to your photo library.</string>
+
+	<!-- Documents (file transfer) -->
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Kursal reads files you pick so you can send them to a contact, and writes files you receive.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Kursal saves received files to your Downloads folder.</string>
+
+	<!-- Microphone (future voice calls — harmless to pre-declare) -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kursal uses the microphone only during voice calls with your contacts.</string>
+
+	<!-- Face ID / Touch ID (optional unlock) -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Kursal uses Face ID to unlock the app.</string>
+
+	<!-- App Transport Security: allow localhost dev + Tauri IPC webview -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>
 		<true/>
 	</dict>
+
+	<!-- Export compliance: we ship strong end-to-end encryption. Set to false and
+	     provide documentation or use exemption category 5D002.a via App Store Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
+	<key>ITSEncryptionExportComplianceCode</key>
+	<string></string>
+
+	<!-- Status bar -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+
+	<!-- File associations (.kursal export files) -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Kursal Contact Export</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>chat.kursal.contact</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Kursal contact export file</string>
+			<key>UTTypeIdentifier</key>
+			<string>chat.kursal.contact</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>kursal</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/octet-stream</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

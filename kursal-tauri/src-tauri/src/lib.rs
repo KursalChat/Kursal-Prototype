@@ -1,5 +1,7 @@
-use crate::dto::{ContactResponse, MessageResponse};
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use kursal_cli::CLIArgs;
+use kursal_core::dto::{ContactResponse, MessageResponse};
+use kursal_core::storage::api_server_enabled;
 use kursal_core::{
     api::{AppEvent, ConnectionStatus, CoreCommand, state::AppState},
     identity::{
@@ -15,21 +17,52 @@ use tokio::sync::{Mutex, mpsc, oneshot::Sender};
 pub mod benchmark;
 pub mod commands;
 pub mod dirs;
-pub mod dto;
 pub mod error;
 pub mod file;
 
 #[derive(Parser, Default)]
+#[command(version, about, long_about = None, author)]
+#[command(propagate_version = true)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
+    /// ID of the used database
     #[arg(long)]
     database_id: Option<String>,
+    /// [UNSAFE!!] Will write the database encryption key in a file - MEANT FOR DEBUGGING!
     #[arg(long)]
     unsafe_write_key_to_file: bool,
 }
 
+#[derive(Subcommand)]
+enum Commands {
+    Cli(CLIArgs),
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    #[allow(unused_mut)]
+    match Args::try_parse() {
+        Ok(args) => match args.command {
+            Some(Commands::Cli(cli_args)) => {
+                block_on(kursal_cli::run(
+                    cli_args.config,
+                    cli_args.validate,
+                    cli_args.default_config,
+                ));
+
+                return;
+            }
+            _ => {}
+        },
+        Err(e) => match e.kind() {
+            clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
+                e.exit()
+            }
+            _ => {}
+        },
+    }
+
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init());
@@ -39,14 +72,20 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+    }
+
     builder
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
+        .setup(move |app| {
             dirs::init_dirs(app).unwrap();
             let log_path = dirs::logs_dir().unwrap().join("kursal.log");
 
-            kursal_core::logging::init_logging("debug", Some(&log_path.to_string_lossy()))
+            let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+            kursal_core::logging::init_logging(&log_level, Some(&log_path.to_string_lossy()))
                 .expect("failed to init logger");
 
             log::info!("Logging enabled — writing to {}", log_path.display());
@@ -63,7 +102,6 @@ pub fn run() {
             log::info!("Directories initialized");
 
             let args = Args::try_parse().unwrap_or_default();
-
             let db_path = app_data_dir.join(format!(
                 "{}.db",
                 args.database_id.clone().unwrap_or("storage".to_string())
@@ -103,7 +141,8 @@ pub fn run() {
                     return Err(format!("identity::init panicked: {msg}").into());
                 }
             };
-            let (network, event_rx) = block_on(NetworkManager::new(&db.0.blocking_lock())).unwrap();
+            let (network, event_rx, bt_event_rx) =
+                block_on(NetworkManager::new(&db.0.blocking_lock())).unwrap();
 
             let (core_cmd_tx, core_cmd_rx) = mpsc::channel::<CoreCommand>(32);
             let (app_event_tx, mut app_event_rx) = mpsc::channel::<AppEvent>(16);
@@ -131,6 +170,7 @@ pub fn run() {
 
                 block_on(local.run_until(dispatch_events(
                     event_rx,
+                    bt_event_rx,
                     core_cmd_rx,
                     db_clone,
                     network_clone,
@@ -150,8 +190,8 @@ pub fn run() {
                 db: db.clone(),
                 network: network_arc.clone(),
                 app_event_tx: app_event_tx.clone(),
-                core_cmd_tx,
-                pending_nearby,
+                core_cmd_tx: core_cmd_tx.clone(),
+                pending_nearby: pending_nearby.clone(),
             });
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -188,6 +228,43 @@ pub fn run() {
                 }
             }
 
+            // spawn local API server if enabled
+            // TODO: kursal_core::storage::set_api_server_enabled(&*db.0.lock().await, false).unwrap();
+            let core_cmd_tx_clone = core_cmd_tx.clone();
+            let db_clone = db.clone();
+            let network_clone = network_arc.clone();
+            let pending_nearby_clone = pending_nearby.clone();
+            tauri::async_runtime::spawn(async move {
+                let is_api_server_enabled = api_server_enabled(&*db.0.lock().await);
+
+                match is_api_server_enabled {
+                    Ok(true) => {
+                        log::info!("Starting API server...");
+
+                        // TODO: proper password!!!
+                        let auth_token = "root".to_string();
+
+                        if let Err(err) = kursal_core::apiserver::run_server(
+                            auth_token,
+                            core_cmd_tx_clone,
+                            db_clone,
+                            network_clone,
+                            pending_nearby_clone,
+                        )
+                        .await
+                        {
+                            log::error!("Error while running API server: {err}");
+                        }
+                    }
+                    Ok(false) => {
+                        log::info!("API server not enabled");
+                    }
+                    Err(err) => {
+                        log::error!("Could not start API server: {err}");
+                    }
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -205,6 +282,7 @@ pub fn run() {
             commands::get_contacts,
             commands::remove_contact,
             commands::send_text,
+            commands::send_typing_indicator,
             commands::get_messages,
             commands::delete_local_message,
             commands::get_security_code,
@@ -263,6 +341,17 @@ async fn handle_core_event(
         AppEvent::MessageReceived { message, .. } => {
             handle
                 .emit("message_received", MessageResponse::from(message))
+                .ok();
+        }
+
+        AppEvent::TypingIndicator { contact_id } => {
+            handle
+                .emit(
+                    "typing_indicator",
+                    serde_json::json!({
+                        "contactId": hex::encode(contact_id.0),
+                    }),
+                )
                 .ok();
         }
 

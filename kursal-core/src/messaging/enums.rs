@@ -27,6 +27,7 @@ impl MessageId {
 #[derive(Serialize, Deserialize)]
 pub enum KursalMessage {
     Text(TextMessage),
+    Typing,
     ReactionAdd(ReactionAdd),
     ReactionRemove(ReactionRemove),
     MessageEdit(MessageEdit),
@@ -53,6 +54,7 @@ impl KursalMessage {
             KursalMessage::FileOffer(m) => Some(m.id),
             KursalMessage::CallSignal(m) => Some(m.call_id),
             KursalMessage::DeliveryReceipt(m) => Some(m.message_id),
+            KursalMessage::Typing => None,
             KursalMessage::FileAccept(_) => None,
             KursalMessage::ReactionAdd(_) => None,
             KursalMessage::ReactionRemove(_) => None,

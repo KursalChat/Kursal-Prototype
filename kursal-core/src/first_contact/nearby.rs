@@ -8,13 +8,22 @@ use crate::{
     network::swarm::{SwarmCommand, get_listen_addrs},
     storage::{SharedDatabase, get_dilithium_pub, get_timestamp_secs},
 };
-use libp2p::PeerId;
 use libsignal_protocol::{DeviceId, ProtocolAddress};
 use rand::{Rng, TryRngCore, distr::Uniform, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, str::FromStr, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, mpsc, oneshot};
+use std::time::Duration;
+use tokio::sync::{mpsc, oneshot};
+
+pub mod bluetooth;
+pub mod mdns;
+
+#[allow(non_camel_case_types)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum NearbyOrigin {
+    Bluetooth,
+    mDNS,
+}
 
 const ANIMALS: &str = include_str!("nearby_animals.txt");
 const ADJECTIVES: &str = include_str!("nearby_adjectives.txt");
@@ -98,12 +107,12 @@ pub trait NearbyTransport: Send + Sync {
     async fn send(&self, peer_id: &str, msg: NearbyMessage) -> Result<()>;
     async fn register_handshake(&self, peer_id: &str) -> mpsc::Receiver<NearbyMessage>;
     async fn unregister_handshake(&self, peer_id: &str);
-    async fn nearby_peers_snapshot(&self) -> Vec<(String, NearbyBeacon)>;
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum NearbyPacket {
     Beacon(NearbyBeacon),
+    BeaconAck(NearbyBeacon),
     Message(NearbyMessage),
 }
 
@@ -116,150 +125,24 @@ impl NearbyPacket {
     }
 }
 
-pub struct MdnsTransport {
-    pub cmd_tx: mpsc::Sender<SwarmCommand>,
-    pub my_beacon: Arc<Mutex<Option<NearbyBeacon>>>,
-    pub nearby_peers: Arc<Mutex<HashMap<String, NearbyBeacon>>>,
-    pub pending_handshakes: Arc<Mutex<HashMap<String, mpsc::Sender<NearbyMessage>>>>,
-}
-
-impl MdnsTransport {
-    pub fn new(cmd_tx: mpsc::Sender<SwarmCommand>) -> Self {
-        Self {
-            cmd_tx,
-            my_beacon: Arc::new(Mutex::new(None)),
-            nearby_peers: Arc::new(Mutex::new(HashMap::new())),
-            pending_handshakes: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    pub async fn on_peer_discovered(&self, peer_id: String) -> Result<()> {
-        let beacon = self
-            .my_beacon
-            .lock()
-            .await
-            .clone()
-            .ok_or(KursalError::Storage("No beacon saved".to_string()))?;
-
-        let serialized = NearbyPacket::Beacon(beacon).serialize()?;
-
-        self.cmd_tx
-            .send(SwarmCommand::SendMessage {
-                peer_id: PeerId::from_str(&peer_id)
-                    .map_err(|err| KursalError::Crypto(err.to_string()))?,
-                data: serialized,
-                addresses: Vec::new(), // TODO: is there bettter?
-            })
-            .await
-            .map_err(|err| KursalError::Network(err.to_string()))?;
-
-        Ok(())
-    }
-
-    pub async fn on_message_received(&self, from: String, data: Vec<u8>) -> NearbyRouteResult {
-        let packet = match NearbyPacket::deserialize(&data) {
-            Ok(p) => p,
-            Err(_) => return NearbyRouteResult::NotNearby,
-        };
-
-        match packet {
-            NearbyPacket::Beacon(mut b) => {
-                // imagine a guy just putting another peer id 💀
-                b.peer_id = from.clone();
-
-                self.nearby_peers.lock().await.insert(from, b);
-                NearbyRouteResult::HandledInternally
-            }
-            NearbyPacket::Message(msg) => {
-                let sender = self.pending_handshakes.lock().await.get(&from).cloned();
-                match sender {
-                    Some(tx) => {
-                        let _ = tx.send(msg).await;
-                        NearbyRouteResult::HandledInternally
-                    }
-                    None => match msg {
-                        NearbyMessage::ConnectRequest { from_session_name } => {
-                            NearbyRouteResult::IncomingRequest {
-                                peer_id: from,
-                                session_name: from_session_name,
-                            }
-                        }
-                        _ => {
-                            // invalid
-                            NearbyRouteResult::HandledInternally
-                        }
-                    },
-                }
-            }
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl NearbyTransport for MdnsTransport {
-    async fn start(&self, beacon: NearbyBeacon) {
-        *self.my_beacon.lock().await = Some(beacon);
-
-        if let Err(e) = self.cmd_tx.send(SwarmCommand::EnableMdns).await {
-            log::error!("Failed to enable mDNS: {e}");
-        }
-    }
-
-    async fn stop(&self) {
-        self.nearby_peers.lock().await.clear();
-        self.pending_handshakes.lock().await.clear();
-        *self.my_beacon.lock().await = None;
-
-        if let Err(e) = self.cmd_tx.send(SwarmCommand::DisableMdns).await {
-            log::error!("Failed to disable mDNS: {e}");
-        }
-    }
-
-    async fn send(&self, peer_id: &str, msg: NearbyMessage) -> Result<()> {
-        let bytes = NearbyPacket::Message(msg).serialize()?;
-        let peer_id =
-            PeerId::from_str(peer_id).map_err(|err| KursalError::Storage(err.to_string()))?;
-
-        self.cmd_tx
-            .send(SwarmCommand::SendMessage {
-                peer_id,
-                data: bytes,
-                addresses: Vec::new(), // TODO: is there bettter?
-            })
-            .await
-            .map_err(|err| KursalError::Network(err.to_string()))?;
-
-        Ok(())
-    }
-
-    async fn register_handshake(&self, peer_id: &str) -> mpsc::Receiver<NearbyMessage> {
-        let (tx, rx) = mpsc::channel::<NearbyMessage>(8);
-
-        self.pending_handshakes
-            .lock()
-            .await
-            .insert(peer_id.to_string(), tx);
-
-        rx
-    }
-
-    async fn unregister_handshake(&self, peer_id: &str) {
-        self.pending_handshakes.lock().await.remove(peer_id);
-    }
-
-    async fn nearby_peers_snapshot(&self) -> Vec<(String, NearbyBeacon)> {
-        let peers = self.nearby_peers.lock().await;
-
-        peers.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-    }
-}
-
 pub enum NearbyRouteResult {
     NotNearby,
     HandledInternally,
     IncomingRequest {
         peer_id: String,
         session_name: String,
+    },
+}
+
+// Events emitted by BTTransport into dispatch_events
+pub enum BtEvent {
+    Beacon {
+        peer_id: String,
+        beacon: NearbyBeacon,
+    },
+    Message {
+        from_peer_id: String,
+        msg: NearbyMessage,
     },
 }
 
