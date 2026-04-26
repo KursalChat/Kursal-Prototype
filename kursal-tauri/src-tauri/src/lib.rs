@@ -298,9 +298,12 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 log::info!("Starting API server...");
 
-                if let Ok(api_config) = api_server_config(&*db.0.lock().await)
+                let api_config = api_server_config(&*db.0.lock().await);
+                let api_token = api_server_password(&*db.0.lock().await);
+
+                if let Ok(api_config) = api_config
                 && api_config.enabled
-                && let Ok(api_token) = api_server_password(&*db.0.lock().await) {
+                && let Ok(api_token) = api_token {
                     if let Err(err) = kursal_core::apiserver::run_server(
                         api_token,
                         api_config,
