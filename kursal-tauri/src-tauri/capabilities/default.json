@@ -9,9 +9,45 @@
     "fs:write-files",
     "fs:read-all",
     "fs:allow-stat",
-    "opener:default",
-    "clipboard-manager:default",
+    "fs:allow-exists",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$APPCACHE/**" },
+        { "path": "$APPDATA/**" },
+        { "path": "$APPLOCALDATA/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$HOME/**" }
+      ]
+    },
+    "clipboard-manager:allow-write-text",
     "core:window:allow-set-badge-count",
-    "os:default"
+    "core:window:allow-set-overlay-icon",
+    "os:default",
+    "notification:default",
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$APPCACHE/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$HOME/**" }
+      ]
+    },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [
+        { "path": "$APPCACHE/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" },
+        { "path": "$DOCUMENT/**" },
+        { "path": "$HOME/**" }
+      ]
+    }
   ]
 }

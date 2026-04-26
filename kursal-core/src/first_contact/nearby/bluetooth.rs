@@ -270,6 +270,18 @@ async fn start_scanner(
     peers: Arc<Mutex<HashMap<String, BtPeer>>>,
     bt_event_tx: mpsc::Sender<BtEvent>,
 ) -> Result<()> {
+    #[cfg(target_os = "android")]
+    {
+        let ctx = ndk_context::android_context();
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
+            .map_err(|e| KursalError::Network(format!("JNI error: {e:?}")))?;
+        let env = vm
+            .attach_current_thread()
+            .map_err(|e| KursalError::Network(format!("JNI attach error: {e:?}")))?;
+        btleplug::platform::init(&env)
+            .map_err(|e| KursalError::Network(format!("btleplug init: {e:?}")))?;
+    }
+
     let err = |s: String| KursalError::Network(s);
 
     let mut guard = scan.lock().await;

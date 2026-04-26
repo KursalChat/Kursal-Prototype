@@ -4,6 +4,28 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import { notifications } from "$lib/state/notifications.svelte";
 
+export type MediaKind = "image" | "audio" | "video" | "other";
+
+const IMAGE_EXT = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "heic", "heif",
+]);
+const AUDIO_EXT = new Set([
+  "mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus", "weba",
+]);
+const VIDEO_EXT = new Set([
+  "mp4", "webm", "mov", "m4v", "ogv", "mkv", "avi",
+]);
+
+export function mediaKindFromFilename(filename: string): MediaKind {
+  const dot = filename.lastIndexOf(".");
+  if (dot < 0) return "other";
+  const ext = filename.slice(dot + 1).toLowerCase();
+  if (IMAGE_EXT.has(ext)) return "image";
+  if (AUDIO_EXT.has(ext)) return "audio";
+  if (VIDEO_EXT.has(ext)) return "video";
+  return "other";
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes <= 0) return "";
   if (bytes < 1024) return `${bytes} B`;

@@ -25,6 +25,7 @@ impl FileLoader for KursalFile {
                     Err(e) => Err(e),
                 }?;
             }
+            KursalFile::Backup(_) => unreachable!(),
         }
 
         Ok(())
@@ -36,28 +37,41 @@ pub fn open_files(app: &AppHandle, files: Vec<(String, String)>) {
         if let Ok(content) = std::fs::read(&path)
             && let Ok(kursal_file) = KursalFile::deserialize(&content)
         {
-            let do_open = app
-                .dialog()
-                .message(kursal_file.get_warning())
-                .title(format!("Opening {file_name}"))
-                .buttons(MessageDialogButtons::OkCancelCustom(
-                    "Open".to_string(),
-                    "Cancel".to_string(),
-                ))
-                .blocking_show();
+            let warning = kursal_file.get_warning();
 
-            if do_open {
-                let app = app.clone();
+            match warning {
+                Err(message) => {
+                    app.dialog()
+                        .message(message)
+                        .title(format!("Opening {file_name}"))
+                        .buttons(MessageDialogButtons::OkCustom("Cancel".to_string()))
+                        .blocking_show();
+                }
+                Ok(message) => {
+                    let do_open = app
+                        .dialog()
+                        .message(message)
+                        .title(format!("Opening {file_name}"))
+                        .buttons(MessageDialogButtons::OkCancelCustom(
+                            "Open".to_string(),
+                            "Cancel".to_string(),
+                        ))
+                        .blocking_show();
 
-                std::thread::spawn(move || {
-                    let local = tokio::task::LocalSet::new();
+                    if do_open {
+                        let app = app.clone();
 
-                    block_on(local.run_until(async move {
-                        if let Err(err) = FileLoader::load(&kursal_file, &app).await {
-                            log::error!("Failed to open file {file_name}: {err}");
-                        }
-                    }));
-                });
+                        std::thread::spawn(move || {
+                            let local = tokio::task::LocalSet::new();
+
+                            block_on(local.run_until(async move {
+                                if let Err(err) = FileLoader::load(&kursal_file, &app).await {
+                                    log::error!("Failed to open file {file_name}: {err}");
+                                }
+                            }));
+                        });
+                    }
+                }
             }
         }
     }

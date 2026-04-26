@@ -6,7 +6,9 @@ use crate::{
     network::{
         BOOTSTRAP_PEERS,
         kademlia::{KAD_MAX_PAYLOAD, KursalKadStore},
+        limiter::ConnectionLimiter,
     },
+    storage::RelayConfig,
 };
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
@@ -17,12 +19,12 @@ use libp2p::{
     request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, SwarmEvent, behaviour::toggle::Toggle},
 };
-use std::io;
 use std::time::Duration;
 use std::{
     collections::{HashMap, HashSet},
     net::IpAddr,
 };
+use std::{convert::Infallible, io};
 use tokio::sync::{mpsc, oneshot};
 
 pub const STREAM_PROTOCOL: StreamProtocol = StreamProtocol::new("/kursal/transfer/1.0.0");
@@ -99,23 +101,28 @@ pub struct KursalBehaviour {
     pub relay_server: Toggle<libp2p::relay::Behaviour>,
     pub dcutr: libp2p::dcutr::Behaviour,
     pub kad: libp2p::kad::Behaviour<KursalKadStore>,
-    pub mdns: libp2p::mdns::tokio::Behaviour,
+    pub mdns: Toggle<libp2p::mdns::tokio::Behaviour>,
     pub identify: libp2p::identify::Behaviour,
     pub request_response: request_response::Behaviour<KursalMsgCodec>,
     pub streaming: libp2p_stream::Behaviour,
+    pub limiter: ConnectionLimiter,
 }
 
 pub struct SwarmHandle {
     pub peer_id: PeerId,
     pub cmd_tx: mpsc::Sender<SwarmCommand>,
-    pub relay_server_enabled: bool,
+    pub relay_config: RelayConfig,
+    pub mdns_enabled: bool,
+    pub port: u16,
 }
 
 impl SwarmHandle {
     pub async fn spawn(
         identity: TransportIdentity,
         event_tx: mpsc::Sender<NetworkEvent>,
-        relay_server_enabled: bool,
+        relay_config: RelayConfig,
+        mdns_enabled: bool,
+        port: u16,
     ) -> Result<Self> {
         let swarm = SwarmBuilder::with_existing_identity(identity.keypair)
             .with_tokio()
@@ -157,11 +164,15 @@ impl SwarmHandle {
                     kad_config,
                 );
 
-                let mdns = libp2p::mdns::tokio::Behaviour::new(mdns::Config {
-                    query_interval: Duration::from_secs(60),
-                    ttl: Duration::from_secs(2 * 60),
-                    enable_ipv6: false,
-                }, local_peer_id)?;
+                let mdns = if mdns_enabled {
+                    Toggle::from(Some(libp2p::mdns::tokio::Behaviour::new(mdns::Config {
+                        query_interval: Duration::from_secs(60),
+                        ttl: Duration::from_secs(2 * 60),
+                        enable_ipv6: false,
+                    }, local_peer_id)?))
+                } else {
+                    Toggle::from(None)
+                };
 
                 let identify = libp2p::identify::Behaviour::new(libp2p::identify::Config::new(
                     "/kursal/v1.0.0".to_string(),
@@ -173,7 +184,7 @@ impl SwarmHandle {
                     request_response::Config::default(),
                 );
 
-                let relay_server = if relay_server_enabled {
+                let relay_server = if relay_config.enabled {
                     Toggle::from(Some(libp2p::relay::Behaviour::new(local_peer_id, libp2p::relay::Config {
                         max_circuits: 1024,
                         max_circuits_per_peer: 32,
@@ -186,6 +197,8 @@ impl SwarmHandle {
 
                 let streaming = libp2p_stream::Behaviour::new();
 
+                let limiter = ConnectionLimiter::new(relay_config.max_connections, relay_config.max_connections_per_ip);
+
                 Ok(KursalBehaviour {
                     relay,
                     relay_server,
@@ -194,18 +207,18 @@ impl SwarmHandle {
                     mdns,
                     identify,
                     request_response,
-                    streaming
+                    streaming,
+                    limiter
                 })
             })
             .map_err(|err| KursalError::Network(format!("swarm behaviour error: {err}")))?
             .build();
 
-        // TODO: maybe specify port?
         swarm
-            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .listen_on(format!("/ip4/0.0.0.0/tcp/{port}").parse().unwrap())
             .map_err(|err| KursalError::Network(format!("swarm listen error: {err}")))?;
         swarm
-            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            .listen_on(format!("/ip4/0.0.0.0/udp/{port}/quic-v1").parse().unwrap())
             .map_err(|err| KursalError::Network(format!("swarm listen error: {err}")))?;
 
         let (cmd_tx, mut cmd_rx) = mpsc::channel::<SwarmCommand>(32);
@@ -276,7 +289,9 @@ impl SwarmHandle {
         Ok(SwarmHandle {
             peer_id,
             cmd_tx,
-            relay_server_enabled,
+            relay_config,
+            mdns_enabled,
+            port,
         })
     }
 }
@@ -643,6 +658,7 @@ pub enum KursalBehaviourEvent {
     Mdns(libp2p::mdns::Event),
     Identify(libp2p::identify::Event),
     RequestResponse(request_response::Event<Vec<u8>, Vec<u8>>),
+    Limiter(Infallible),
 }
 
 impl From<libp2p::relay::client::Event> for KursalBehaviourEvent {
@@ -673,6 +689,11 @@ impl From<libp2p::mdns::Event> for KursalBehaviourEvent {
 impl From<libp2p::identify::Event> for KursalBehaviourEvent {
     fn from(value: libp2p::identify::Event) -> Self {
         Self::Identify(value)
+    }
+}
+impl From<Infallible> for KursalBehaviourEvent {
+    fn from(value: Infallible) -> Self {
+        Self::Limiter(value)
     }
 }
 

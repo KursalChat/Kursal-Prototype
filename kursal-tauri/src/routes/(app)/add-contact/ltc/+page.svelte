@@ -8,6 +8,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { goto } from "$app/navigation";
   import Button from "$lib/components/Button.svelte";
+  import Segmented from "$lib/components/settings/Segmented.svelte";
   import {
     Download,
     Upload,
@@ -64,16 +65,16 @@
       const bytes = Array.from(bytesArr);
       const contact = await importLtc(bytes);
       contactsState.upsert(contact);
-      notifications.push("Contact file imported", "success");
+      notifications.push("Long-term code imported", "success");
       goto(`/chat/${contact.userId}`);
     } catch (e) {
       const errMsg = String(e);
       if (errMsg.includes("expired")) {
         importError =
-          "This contact file has expired. Ask your contact to generate a new one.";
+          "This long-term code has expired. Ask your contact to generate a new one.";
       } else {
         importError =
-          "Invalid file. Please select a valid .kursal contact file. " + errMsg;
+          "Invalid file. Please select a valid .kursal long-term code. " + errMsg;
       }
       console.error("Import failed:", e);
     } finally {
@@ -86,7 +87,7 @@
     try {
       const bytes = await exportLtc();
       const path = await save({
-        title: "Save contact file",
+        title: "Save long-term code",
         defaultPath: "kursal-contact.kursal",
         filters: [
           {
@@ -102,7 +103,7 @@
       }
 
       await writeFile(path, new Uint8Array(bytes));
-      notifications.push("Contact file ready", "success");
+      notifications.push("Long-term code ready", "success");
     } catch (e) {
       if (String(e).toLowerCase().includes("cancel")) {
         notifications.push("Save cancelled", "info");
@@ -128,16 +129,16 @@
       const bytes = Array.from(new Uint8Array(buffer));
       const contact = await importLtc(bytes);
       contactsState.upsert(contact);
-      notifications.push("Contact file imported", "success");
+      notifications.push("Long-term code imported", "success");
       goto(`/chat/${contact.userId}`);
     } catch (e) {
       const errMsg = String(e);
       if (errMsg.includes("expired")) {
         importError =
-          "This contact file has expired. Ask your contact to generate a new one.";
+          "This long-term code has expired. Ask your contact to generate a new one.";
       } else {
         importError =
-          "Invalid file. Please select a valid .kursal contact file.";
+          "Invalid file. Please select a valid .kursal long-term code.";
       }
       console.error("Import failed:", e);
     } finally {
@@ -221,28 +222,20 @@
 </script>
 
 <div class="ltc-flow">
-  <div class="mode-toggle" role="tablist" aria-label="Contact file flow">
-    <button
-      class="toggle-pill"
-      class:active={mode === "export"}
-      onclick={() => (mode = "export")}
-      role="tab"
-      aria-selected={mode === "export"}>Export</button
-    >
-    <button
-      class="toggle-pill"
-      class:active={mode === "import"}
-      onclick={() => (mode = "import")}
-      role="tab"
-      aria-selected={mode === "import"}>Import</button
-    >
-  </div>
+  <Segmented
+    value={mode}
+    options={[
+      { value: "export", label: "Export" },
+      { value: "import", label: "Import" },
+    ]}
+    onchange={(v) => (mode = v)}
+  />
 
   {#if mode === "export"}
     <section class="mode-content">
       <div class="heading-row">
         <div>
-          <h3>Create contact file</h3>
+          <h3>Create long-term code</h3>
         </div>
       </div>
 
@@ -270,7 +263,7 @@
     <section class="mode-content">
       <div class="heading-row">
         <div>
-          <h3>Import contact file</h3>
+          <h3>Import long-term code</h3>
           <p class="subtle">Drop a file here or browse for one.</p>
         </div>
       </div>
@@ -323,43 +316,13 @@
     gap: 16px;
   }
 
-  .mode-toggle {
-    display: flex;
-    gap: 6px;
-    background: rgba(15, 23, 42, 0.45);
-    border-radius: 12px;
-    padding: 4px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    width: fit-content;
-  }
-
-  .toggle-pill {
-    min-width: 84px;
-    padding: 8px 12px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: 10px;
-    transition: all var(--transition);
-    font-weight: 700;
-    font-size: 12px;
-  }
-
-  .toggle-pill.active {
-    background: rgba(51, 65, 85, 0.9);
-    color: var(--text-primary);
-    border-color: rgba(148, 163, 184, 0.35);
-  }
-
   .mode-content {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 14px;
-    background: rgba(15, 23, 42, 0.5);
-    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
     padding: 18px;
   }
 
@@ -372,8 +335,10 @@
 
   h3 {
     margin: 0;
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 700;
     line-height: 1.2;
+    color: var(--text-primary);
   }
 
   .subtle {
@@ -385,7 +350,7 @@
   .explanation {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
   }
 
@@ -393,12 +358,13 @@
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    background: rgba(251, 191, 36, 0.08);
-    border: 1px solid rgba(251, 191, 36, 0.28);
-    border-radius: 12px;
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+    border-radius: var(--radius-md);
     padding: 12px;
     font-size: 13px;
-    line-height: 1.55;
+    line-height: 1.5;
+    color: var(--warning);
   }
 
   .warning strong {
@@ -411,28 +377,26 @@
   }
 
   .drop-zone {
-    border: 1px dashed rgba(148, 163, 184, 0.3);
-    border-radius: 14px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
     padding: 28px 16px;
     text-align: center;
     cursor: pointer;
-    transition:
-      border-color var(--transition),
-      background var(--transition),
-      transform var(--transition);
-    background: rgba(15, 23, 42, 0.35);
+    transition: border-color var(--transition), background var(--transition);
+    background: var(--bg-input);
     width: 100%;
     color: var(--text-secondary);
   }
 
   .drop-zone:hover,
   .drop-zone.dragging {
-    border-color: rgba(129, 140, 248, 0.45);
-    background: rgba(30, 41, 59, 0.55);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--text-primary);
   }
 
   .drop-zone:focus-visible {
-    outline: 2px solid rgba(103, 232, 249, 0.7);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 
@@ -450,32 +414,22 @@
   }
 
   .error-message {
-    background: rgba(237, 66, 69, 0.1);
+    background: var(--danger-dim);
     color: var(--danger);
     padding: 12px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     font-size: 13px;
     line-height: 1.5;
-    border: 1px solid rgba(237, 66, 69, 0.35);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   }
 
-  :global(.mode-content .button) {
+  :global(.mode-content > .button) {
     width: 100%;
   }
 
   @media (max-width: 740px) {
     .mode-content {
       padding: 16px;
-      border-radius: 16px;
-    }
-
-    h3 {
-      font-size: 19px;
-    }
-
-    .toggle-pill {
-      min-width: 72px;
-      padding-inline: 10px;
     }
   }
 </style>

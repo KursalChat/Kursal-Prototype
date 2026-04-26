@@ -19,6 +19,7 @@
 </script>
 
 <div class="onboarding" class:bright={screen === 5}>
+  <div class="mac-drag" data-tauri-drag-region aria-hidden="true"></div>
   <div class="grain"></div>
   <div class="glow-bg"></div>
 
@@ -48,6 +49,19 @@
 </div>
 
 <style>
+  .mac-drag {
+    display: none;
+  }
+  :global(html.mac) .mac-drag {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    z-index: 9999;
+  }
+
   .onboarding {
     position: fixed;
     inset: 0;

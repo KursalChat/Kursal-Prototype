@@ -20,6 +20,9 @@ use tokio::{
 pub struct FileTransferEntry {
     pub path: String,
     pub my_random: [u8; 32],
+    pub shared_at: u64,
+    pub last_accessed_at: Option<u64>,
+    pub size_bytes: u64,
 }
 impl FileTransferEntry {
     pub fn serialize(&self) -> Result<Vec<u8>> {

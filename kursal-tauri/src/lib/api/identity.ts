@@ -20,3 +20,6 @@ export const broadcastProfile = (displayName: string, avatarBytes: number[] | nu
 
 export const shareProfile = (displayName: string, avatarBytes: number[] | null, contactId: string): Promise<void> =>
   invoke('share_profile', { displayName, avatarBytes, contactId });
+
+export const frontendReady = (): Promise<void> =>
+  invoke('frontend_ready');

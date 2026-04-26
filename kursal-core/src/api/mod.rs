@@ -86,6 +86,7 @@ pub enum AppEvent {
         offer_id: MessageId,
         filename: String,
         size_bytes: u64,
+        autodownload: Option<String>,
     },
     FileTransferProgress {
         transfer_id: MessageId,
@@ -95,6 +96,10 @@ pub enum AppEvent {
     FileReceived {
         contact_id: UserId,
         save_path: String,
+    },
+    BackendSignal {
+        signal: String,
+        payload: String,
     },
 }
 

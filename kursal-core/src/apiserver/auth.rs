@@ -1,4 +1,5 @@
 use crate::apiserver::APIAppState;
+use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     extract::{ConnectInfo, Request, State},
     http::StatusCode,
@@ -29,8 +30,13 @@ pub async fn auth_middleware(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .is_some_and(|v| {
-            v.len() == state.auth_token.len()
-                && subtle::ConstantTimeEq::ct_eq(v.as_bytes(), state.auth_token.as_bytes()).into()
+            if let Ok(auth_token) = PasswordHash::new(&state.auth_token) {
+                Argon2::default()
+                    .verify_password(v.as_bytes(), &auth_token)
+                    .is_ok()
+            } else {
+                false
+            }
         });
 
     if token_match {

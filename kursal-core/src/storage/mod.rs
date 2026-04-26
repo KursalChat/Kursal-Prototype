@@ -1,9 +1,14 @@
 use crate::{
     KursalError, Result,
+    api::file_transfers::FileTransferEntry,
+    apiserver::LocalApiConfig,
+    contacts::Contact,
     crypto::stream::{stream_decrypt, stream_encrypt},
     identity::UserId,
+    storage::filetransfer::{get_auto_download_storage_for, get_folder_size},
 };
 use aes_gcm::{Aes256Gcm, KeyInit, aead::Aead};
+use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use async_trait::async_trait;
 use hkdf::Hkdf;
 use libsignal_protocol::{
@@ -12,13 +17,22 @@ use libsignal_protocol::{
     ProtocolAddress, PublicKey, SessionRecord, SessionStore, SignalProtocolError, SignedPreKeyId,
     SignedPreKeyRecord, SignedPreKeyStore,
 };
+use rand::{TryRngCore, rngs::OsRng};
 use redb::{ReadableDatabase, ReadableTable, TableDefinition};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{array::TryFromSliceError, path::Path, sync::Arc, time::SystemTime};
+use std::{
+    array::TryFromSliceError,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::SystemTime,
+};
 use tokio::sync::Mutex;
 use zeroize::Zeroizing;
 
+pub mod backup;
 pub mod file;
+pub mod filetransfer;
 
 pub const TABLE_SESSIONS: TableDefinition<&str, &[u8]> = TableDefinition::new("sessions");
 pub const TABLE_IDENTITY_KEYS: TableDefinition<&str, &[u8]> = TableDefinition::new("identity_keys");
@@ -143,8 +157,8 @@ impl Database {
         table: TableDefinition<&str, &[u8]>,
         start: &str,
         end: &str,
-        limit: usize,
-    ) -> Result<Vec<Vec<u8>>> {
+        limit: Option<usize>,
+    ) -> Result<Vec<(String, Vec<u8>)>> {
         let read_txn = self
             .inner
             .begin_read()
@@ -156,20 +170,31 @@ impl Database {
             Err(err) => return Err(KursalError::Storage(err.to_string())),
         };
 
-        table
+        let op = table
             .range(start..=end)
             .map_err(|err| KursalError::Storage(err.to_string()))?
-            .rev()
-            .take(limit)
-            .map(|entry| {
-                let (_, v) = entry.map_err(|err| KursalError::Storage(err.to_string()))?;
+            .rev();
 
-                stream_decrypt(&self.key, v.value())
-            })
-            .collect()
+        let op: Box<dyn Iterator<Item = _>> = if let Some(limit) = limit {
+            Box::new(op.take(limit))
+        } else {
+            Box::new(op)
+        };
+
+        op.map(|entry| {
+            let (k, v) = entry.map_err(|err| KursalError::Storage(err.to_string()))?;
+
+            let decrypted = stream_decrypt(&self.key, v.value())?;
+
+            Ok((k.value().to_string(), decrypted))
+        })
+        .collect()
     }
 
-    pub(crate) fn raw_readall(&self, table: TableDefinition<&str, &[u8]>) -> Result<Vec<Vec<u8>>> {
+    pub(crate) fn raw_readall(
+        &self,
+        table: TableDefinition<&str, &[u8]>,
+    ) -> Result<Vec<(String, Vec<u8>)>> {
         let read_txn = self
             .inner
             .begin_read()
@@ -185,7 +210,9 @@ impl Database {
             .iter()
             .map_err(|err| KursalError::Storage(err.to_string()))?
             .map(|entry| {
-                let (_, v) = entry.map_err(|err| KursalError::Storage(err.to_string()))?;
+                let (k, v) = entry.map_err(|err| KursalError::Storage(err.to_string()))?;
+
+                let key = k.value().to_string();
 
                 let bytes = v.value();
                 let nonce: [u8; 12] = bytes[0..12]
@@ -195,9 +222,11 @@ impl Database {
                 let cipher = Aes256Gcm::new_from_slice(&*self.key)
                     .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
-                cipher
+                let decrypted = cipher
                     .decrypt(&nonce.into(), &bytes[12..])
-                    .map_err(|err| KursalError::Crypto(err.to_string()))
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?;
+
+                Ok((key, decrypted))
             })
             .collect::<Result<Vec<_>>>()
     }
@@ -226,6 +255,37 @@ impl Database {
                         .map(|(k, _)| k.value().starts_with(prefix))
                         .unwrap_or(false)
                 })
+                .map(|entry| entry.map(|(k, _)| k.value().to_string()))
+                .collect::<std::result::Result<_, _>>()
+                .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+            for key in &keys_to_delete {
+                tbl.remove(key.as_str())
+                    .map_err(|err| KursalError::Storage(err.to_string()))?;
+            }
+        }
+
+        write_txn
+            .commit()
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+        Ok(())
+    }
+
+    pub(crate) fn raw_delete_all(&self, table: TableDefinition<&str, &[u8]>) -> Result<()> {
+        let write_txn = self
+            .inner
+            .begin_write()
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+        {
+            let mut tbl = write_txn
+                .open_table(table)
+                .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+            let keys_to_delete: Vec<String> = tbl
+                .iter()
+                .map_err(|err| KursalError::Storage(err.to_string()))?
                 .map(|entry| entry.map(|(k, _)| k.value().to_string()))
                 .collect::<std::result::Result<_, _>>()
                 .map_err(|err| KursalError::Storage(err.to_string()))?;
@@ -586,6 +646,14 @@ impl KyberPreKeyStore for SharedDatabase {
     }
 }
 
+pub fn delete_message_history_for(db: &Database, contact_id: String) -> Result<()> {
+    db.raw_delete_prefix(TABLE_MESSAGES, &format!("{contact_id}:"))
+}
+
+pub fn delete_message_history_all(db: &Database) -> Result<()> {
+    db.raw_delete_all(TABLE_MESSAGES)
+}
+
 pub fn get_local_identity_pub(db: &Database) -> Result<Vec<u8>> {
     let identity_bytes = db
         .raw_read(TABLE_IDENTITY_KEYS, "local_identity")?
@@ -609,41 +677,395 @@ pub fn get_dilithium_pub(db: &Database) -> Result<Vec<u8>> {
         .ok_or(KursalError::Storage("No dilithium public key".to_string()))
 }
 
-pub fn relay_server_enabled(db: &Database) -> Result<bool> {
-    let a = db
-        .raw_read(TABLE_SETTINGS, "relay_server_enabled")?
-        .unwrap_or(vec![0u8]);
+//
 
-    Ok(a == vec![1u8])
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContactUsage {
+    pub contact_id: String,
+    pub db_bytes: u64,
+    pub files_bytes: u64,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageUsage {
+    pub logs_bytes: u64,
+    pub db_bytes: u64,
+    pub files_bytes: u64,
+    pub per_contact: Vec<ContactUsage>,
+}
+impl StorageUsage {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
 }
 
-pub fn set_relay_server_enabled(db: &Database, value: bool) -> Result<()> {
+pub fn get_storage_usage(
+    db: &Database,
+    logs_dir: PathBuf,
+    cache_dir: PathBuf,
+    db_path: PathBuf,
+) -> Result<StorageUsage> {
+    let logs_bytes = get_folder_size(logs_dir, 1)?;
+    let db_bytes = db_path
+        .metadata()
+        .map(|m| m.len())
+        .map_err(KursalError::Io)?;
+
+    let mut files_bytes = 0u64;
+
+    let contacts = Contact::load_all(db)?;
+    let mut per_contact = Vec::with_capacity(contacts.len());
+    for contact in contacts.into_iter() {
+        let contact_id = hex::encode(contact.user_id.0);
+
+        let contact_files_bytes =
+            get_auto_download_storage_for(cache_dir.clone(), contact_id.clone())?;
+
+        let read_txn = db
+            .inner
+            .begin_read()
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+        let table = match read_txn.open_table(TABLE_MESSAGES) {
+            Ok(t) => t,
+            Err(redb::TableError::TableDoesNotExist(_)) => {
+                per_contact.push(ContactUsage {
+                    contact_id,
+                    db_bytes: 0u64,
+                    files_bytes: contact_files_bytes,
+                });
+                continue;
+            }
+            Err(err) => return Err(KursalError::Storage(err.to_string())),
+        };
+
+        let prefix = format!("{contact_id}:");
+        let op = table
+            .range(prefix.as_str()..)
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
+
+        let mut db_bytes_sum = 0u64;
+        for entry in op {
+            let (k, v) = entry.map_err(|err| KursalError::Storage(err.to_string()))?;
+            if !k.value().starts_with(&prefix) {
+                break;
+            }
+            db_bytes_sum += v.value().len() as u64;
+        }
+
+        per_contact.push(ContactUsage {
+            contact_id,
+            db_bytes: db_bytes_sum,
+            files_bytes: contact_files_bytes,
+        });
+        files_bytes += contact_files_bytes;
+    }
+
+    Ok(StorageUsage {
+        logs_bytes,
+        db_bytes,
+        files_bytes,
+        per_contact,
+    })
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoAcceptConfig {
+    pub mode: String, // "nobody" | "verified" | "all"
+    pub size_cap_bytes: u64,
+}
+impl AutoAcceptConfig {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+}
+
+pub fn get_auto_accept_config(db: &Database) -> Result<AutoAcceptConfig> {
+    Ok(db
+        .raw_read(TABLE_SETTINGS, "auto_accept_config")?
+        .map(|bytes| AutoAcceptConfig::deserialize(&bytes))
+        .transpose()?
+        .unwrap_or(AutoAcceptConfig {
+            mode: "nobody".to_string(),
+            size_cap_bytes: 2 * 1024 * 1024,
+        }))
+}
+
+pub fn set_auto_accept_config(db: &Database, config: AutoAcceptConfig) -> Result<()> {
+    let bytes = config.serialize()?;
+
+    db.raw_write(TABLE_SETTINGS, "auto_accept_config", &bytes)?;
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoDownloadConfig {
+    pub scope: String, // "per_contact" | "all_contacts"
+    pub limit_bytes: u64,
+}
+impl AutoDownloadConfig {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+}
+
+pub fn get_auto_download_config(db: &Database) -> Result<AutoDownloadConfig> {
+    Ok(db
+        .raw_read(TABLE_SETTINGS, "auto_download_config")?
+        .map(|bytes| AutoDownloadConfig::deserialize(&bytes))
+        .transpose()?
+        .unwrap_or(AutoDownloadConfig {
+            scope: "all_contacts".to_string(),
+            limit_bytes: 100 * 1024 * 1024,
+        }))
+}
+
+pub fn set_auto_download_config(db: &Database, config: AutoDownloadConfig) -> Result<()> {
+    let bytes = config.serialize()?;
+
+    db.raw_write(TABLE_SETTINGS, "auto_download_config", &bytes)?;
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedFileEntry {
+    pub id: String,
+    pub filepath: String,
+    pub size_bytes: u64,
+    pub recipient_id: String,
+    pub shared_at: u64,
+    pub last_accessed_at: Option<u64>,
+}
+impl SharedFileEntry {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+}
+
+pub fn files_list_shared(db: &Database) -> Result<Vec<SharedFileEntry>> {
+    let get_all = db
+        .raw_range(TABLE_FILE_TRANSFERS, "send:", "send;", None)?
+        .into_iter()
+        .filter_map(|(key, bytes)| {
+            if let Ok(entry) = FileTransferEntry::deserialize(&bytes) {
+                Some((key, entry))
+            } else {
+                None
+            }
+        })
+        .map(|(key, entry)| SharedFileEntry {
+            id: key.clone(),
+            filepath: entry.path,
+            size_bytes: entry.size_bytes,
+            recipient_id: key.split(':').nth(1usize).unwrap_or("unknown").to_string(),
+            shared_at: entry.shared_at,
+            last_accessed_at: entry.last_accessed_at,
+        })
+        .collect();
+
+    Ok(get_all)
+}
+pub fn files_revoke_shared(db: &Database, id: String) -> Result<()> {
+    db.raw_delete(TABLE_FILE_TRANSFERS, &id)?;
+
+    Ok(())
+}
+
+pub fn api_server_password(db: &Database) -> Result<String> {
+    match db.raw_read(TABLE_SETTINGS, "api_server_password")? {
+        None => Err(KursalError::Storage("Entry not found".to_string())),
+        Some(bytes) => {
+            String::from_utf8(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+        }
+    }
+}
+pub fn hash_new_api_server_password() -> Result<(String, String)> {
+    let mut bytes = [0u8; 32];
+    OsRng
+        .try_fill_bytes(&mut bytes)
+        .map_err(|err| KursalError::Crypto(err.to_string()))?;
+
+    let token = hex::encode(bytes);
+
+    let salt = SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let argon2 = Argon2::default();
+
+    let password_hash = argon2
+        .hash_password(token.as_bytes(), &salt)
+        .map_err(|err| KursalError::Crypto(err.to_string()))?
+        .to_string();
+
+    Ok((token, password_hash))
+}
+
+pub fn set_api_server_password_hash(db: &Database, hash: &str) -> Result<()> {
+    db.raw_write(TABLE_SETTINGS, "api_server_password", hash.as_bytes())?;
+    Ok(())
+}
+
+pub fn api_server_config(db: &Database) -> Result<LocalApiConfig> {
+    match db.raw_read(TABLE_SETTINGS, "api_server_config")? {
+        None => Err(KursalError::Storage("Entry not found".to_string())),
+        Some(bytes) => LocalApiConfig::deserialize(&bytes),
+    }
+}
+pub fn set_api_server_config(db: &Database, config: LocalApiConfig) -> Result<()> {
     db.raw_write(
         TABLE_SETTINGS,
-        "relay_server_enabled",
+        "api_server_config",
+        &config
+            .serialize()
+            .map_err(|err| KursalError::Storage(err.to_string()))?,
+    )?;
+
+    Ok(())
+}
+
+//
+
+pub fn get_peer_rotation_interval(db: &Database) -> u64 {
+    db.raw_read(TABLE_SETTINGS, "peer_rotation_interval_secs")
+        .ok()
+        .flatten()
+        .and_then(|b| b.try_into().ok().map(u64::from_be_bytes))
+        .unwrap_or(30 * 60 * 60)
+}
+pub fn set_peer_rotation_interval(db: &Database, value: u64) -> Result<()> {
+    db.raw_write(
+        TABLE_SETTINGS,
+        "peer_rotation_interval_secs",
+        &value.to_be_bytes(),
+    )?;
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayConfig {
+    pub enabled: bool,
+    pub max_connections: u32,
+    pub max_connections_per_ip: u32,
+}
+impl RelayConfig {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+}
+pub fn get_relay_config(db: &Database) -> Result<RelayConfig> {
+    let entry = db
+        .raw_read(TABLE_SETTINGS, "relay_config")?
+        .map(|bytes| RelayConfig::deserialize(&bytes))
+        .transpose()?
+        .unwrap_or(RelayConfig {
+            enabled: true,
+            max_connections: 100u32,
+            max_connections_per_ip: 3u32,
+        });
+
+    Ok(entry)
+}
+pub fn set_relay_config(db: &Database, value: RelayConfig) -> Result<()> {
+    let bytes = value.serialize()?;
+
+    db.raw_write(TABLE_SETTINGS, "relay_config", &bytes)?;
+
+    Ok(())
+}
+
+pub fn get_swarm_listening_port(db: &Database) -> Option<u16> {
+    if cfg!(debug_assertions) {
+        return None;
+    }
+
+    db.raw_read(TABLE_SETTINGS, "swarm_listening_port")
+        .ok()
+        .flatten()
+        .and_then(|b| b.try_into().ok().map(u16::from_be_bytes))
+}
+pub fn set_swarm_listening_port(db: &Database, port: Option<u16>) -> Result<()> {
+    if let Some(port) = port {
+        db.raw_write(TABLE_SETTINGS, "swarm_listening_port", &port.to_be_bytes())?;
+    } else {
+        db.raw_delete(TABLE_SETTINGS, "swarm_listening_port")?;
+    }
+
+    Ok(())
+}
+
+pub fn get_swarm_mdns_enabled(db: &Database) -> Result<bool> {
+    let value = db
+        .raw_read(TABLE_SETTINGS, "swarm_mdns_enabled")?
+        .unwrap_or(vec![1u8]);
+
+    Ok(value == vec![1u8])
+}
+pub fn set_swarm_mdns_enabled(db: &Database, value: bool) -> Result<()> {
+    db.raw_write(
+        TABLE_SETTINGS,
+        "swarm_mdns_enabled",
         if value { &[1u8] } else { &[0u8] },
     )?;
 
     Ok(())
 }
 
-pub fn api_server_enabled(db: &Database) -> Result<bool> {
-    let a = db
-        .raw_read(TABLE_SETTINGS, "api_server_enabled")?
-        .unwrap_or(vec![0u8]);
+pub fn get_updater_enabled(db: &Database) -> Result<bool> {
+    let value = db
+        .raw_read(TABLE_SETTINGS, "updater_enabled")?
+        .unwrap_or(vec![1u8]);
 
-    Ok(a == vec![1u8])
+    Ok(value == vec![1u8])
 }
-
-pub fn set_api_server_enabled(db: &Database, value: bool) -> Result<()> {
+pub fn set_updater_enabled(db: &Database, value: bool) -> Result<()> {
     db.raw_write(
         TABLE_SETTINGS,
-        "api_server_enabled",
+        "updater_enabled",
         if value { &[1u8] } else { &[0u8] },
     )?;
 
     Ok(())
 }
+
+pub fn get_typing_indicators_enabled(db: &Database) -> Result<bool> {
+    let value = db
+        .raw_read(TABLE_SETTINGS, "typing_indicators_enabled")?
+        .unwrap_or(vec![1u8]);
+
+    Ok(value == vec![1u8])
+}
+pub fn set_typing_indicators_enabled(db: &Database, value: bool) -> Result<()> {
+    db.raw_write(
+        TABLE_SETTINGS,
+        "typing_indicators_enabled",
+        if value { &[1u8] } else { &[0u8] },
+    )?;
+
+    Ok(())
+}
+
+//
 
 pub fn get_local_profile(db: &Database) -> Result<(String, Option<Vec<u8>>)> {
     let username = std::str::from_utf8(
@@ -659,7 +1081,6 @@ pub fn get_local_profile(db: &Database) -> Result<(String, Option<Vec<u8>>)> {
 
     Ok((username, avatar))
 }
-
 pub fn set_local_profile(
     db: &Database,
     display_name: String,
@@ -707,4 +1128,21 @@ pub fn get_timestamp_secs() -> Result<u64> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|el| el.as_secs())
         .map_err(|err| KursalError::Crypto(err.to_string()))
+}
+
+//
+
+// ooh spooky
+pub const RESET_FULL_APP: &str = "SET_THIS_TAG_TO_RESET_THE_FULL_APP yeah its dangerous";
+pub fn reset_full_app(db: &Database) -> Result<()> {
+    db.raw_write(TABLE_SETTINGS, RESET_FULL_APP, RESET_FULL_APP.as_bytes())?;
+    Ok(())
+}
+pub fn should_reset_full_app(db: &Database) -> bool {
+    let val = db.raw_read(TABLE_SETTINGS, RESET_FULL_APP);
+
+    match val {
+        Ok(Some(bytes)) => bytes == RESET_FULL_APP.as_bytes(),
+        _ => false,
+    }
 }

@@ -6,6 +6,7 @@
   import { goto } from "$app/navigation";
   import { notifications } from "$lib/state/notifications.svelte";
   import Button from "$lib/components/Button.svelte";
+  import Segmented from "$lib/components/settings/Segmented.svelte";
   import QRCode from "qrcode";
   import {
     Copy,
@@ -203,6 +204,13 @@
   }
 
   onMount(() => {
+    const params = new URLSearchParams(window.location.search);
+    const receiveCode = params.get("receive");
+    if (receiveCode) {
+      mode = "receive";
+      inputOtp = receiveCode;
+    }
+
     if (browser) {
       const raw = sessionStorage.getItem(storageKey);
 
@@ -238,22 +246,14 @@
 </script>
 
 <div class="otp-flow">
-  <div class="mode-toggle" role="tablist" aria-label="OTP workflow mode">
-    <button
-      class="toggle-pill"
-      class:active={mode === "share"}
-      onclick={() => (mode = "share")}
-      role="tab"
-      aria-selected={mode === "share"}>Share</button
-    >
-    <button
-      class="toggle-pill"
-      class:active={mode === "receive"}
-      onclick={() => (mode = "receive")}
-      role="tab"
-      aria-selected={mode === "receive"}>Receive</button
-    >
-  </div>
+  <Segmented
+    value={mode}
+    options={[
+      { value: "share", label: "Share" },
+      { value: "receive", label: "Receive" },
+    ]}
+    onchange={(v) => (mode = v)}
+  />
 
   {#if mode === "share"}
     <section class="mode-content">
@@ -275,24 +275,15 @@
           Send this to your contact through a secure channel.
         </p>
 
-        <div class="sub-toggle" role="tablist" aria-label="OTP share view">
-          <button
-            class="sub-toggle-button"
-            class:active={shareView === "words"}
-            onclick={() => (shareView = "words")}
-          >
-            <Type size={14} />
-            Words
-          </button>
-          <button
-            class="sub-toggle-button"
-            class:active={shareView === "qr"}
-            onclick={() => (shareView = "qr")}
-          >
-            <QrCode size={14} />
-            QR
-          </button>
-        </div>
+        <Segmented
+          size="sm"
+          value={shareView}
+          options={[
+            { value: "words", label: "Words", icon: Type },
+            { value: "qr", label: "QR", icon: QrCode },
+          ]}
+          onchange={(v) => (shareView = v)}
+        />
 
         {#if shareView === "words"}
           <div
@@ -420,44 +411,13 @@
     gap: 16px;
   }
 
-  .mode-toggle {
-    display: flex;
-    gap: 6px;
-    background: rgba(15, 23, 42, 0.45);
-    border-radius: 12px;
-    padding: 4px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    width: fit-content;
-  }
-
-  .toggle-pill {
-    min-width: 92px;
-    padding: 8px 12px;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: 10px;
-    transition: all var(--transition);
-    font-weight: 700;
-    font-size: 12px;
-    letter-spacing: 0.06em;
-  }
-
-  .toggle-pill.active {
-    background: rgba(51, 65, 85, 0.9);
-    color: var(--text-primary);
-    border-color: rgba(148, 163, 184, 0.35);
-  }
-
   .mode-content {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 14px;
-    background: rgba(15, 23, 42, 0.5);
-    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
     padding: 18px;
   }
 
@@ -470,8 +430,10 @@
 
   h3 {
     margin: 0;
-    font-size: 20px;
+    font-size: 18px;
+    font-weight: 700;
     line-height: 1.2;
+    color: var(--text-primary);
   }
 
   .subtle {
@@ -482,76 +444,46 @@
 
   .timer-pill {
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--text-secondary);
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
     border-radius: 999px;
-    padding: 7px 11px;
+    padding: 6px 10px;
     white-space: nowrap;
   }
 
   .explanation {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
   }
 
   .help-text {
     margin: 0;
     color: var(--text-muted);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  .sub-toggle {
-    display: flex;
-    gap: 8px;
-  }
-
-  .sub-toggle-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    background: rgba(15, 23, 42, 0.42);
-    color: var(--text-secondary);
     font-size: 12px;
-    font-weight: 700;
-    padding: 8px 10px;
-    transition: all var(--transition);
-  }
-
-  .sub-toggle-button.active {
-    background: rgba(51, 65, 85, 0.9);
-    border-color: rgba(148, 163, 184, 0.38);
-    color: var(--text-primary);
-  }
-
-  .code-display {
-    padding: 0;
+    line-height: 1.5;
   }
 
   .code-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 16px;
+    gap: 8px;
   }
 
   .code-word {
-    padding: 8px 10px;
-    min-width: 0;
-    border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    background: rgba(30, 41, 59, 0.62);
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
   }
 
   .word-value {
     font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
     line-height: 1.35;
     overflow-wrap: anywhere;
     word-break: normal;
@@ -559,7 +491,6 @@
   }
 
   .qr-card {
-    padding: 0;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -567,14 +498,14 @@
 
   .qr-image {
     width: min(320px, 100%);
-    border-radius: 10px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
   }
 
   .action-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
-    padding: 8px 0;
+    gap: 10px;
   }
 
   .qr-fallback {
@@ -585,8 +516,8 @@
 
   :global(.action-row .button) {
     width: auto;
-    min-width: 180px;
-    flex: 1 1 220px;
+    min-width: 160px;
+    flex: 1 1 200px;
   }
 
   .input-wrap {
@@ -594,23 +525,23 @@
   }
 
   textarea {
-    background: rgba(15, 23, 42, 0.35);
-    border: 1px solid rgba(148, 163, 184, 0.24);
-    border-radius: 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
     color: var(--text-primary);
-    padding: 14px 92px 14px 14px;
-    font-size: 14px;
+    padding: 12px 92px 12px 14px;
+    font-size: 13px;
     resize: vertical;
-    min-height: 92px;
+    min-height: 88px;
     width: 100%;
     font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
-    transition: all var(--transition);
+    transition: border-color var(--transition), box-shadow var(--transition);
   }
 
   textarea:focus {
     outline: none;
-    border-color: rgba(129, 140, 248, 0.55);
-    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.16);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-dim);
   }
 
   textarea:disabled {
@@ -619,8 +550,8 @@
 
   .input-actions {
     position: absolute;
-    right: 10px;
-    top: 10px;
+    right: 8px;
+    top: 8px;
     display: flex;
     gap: 6px;
   }
@@ -628,45 +559,39 @@
   .inline-action {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    border-radius: 8px;
-    border: 1px solid rgba(148, 163, 184, 0.26);
-    background: rgba(30, 41, 59, 0.72);
+    gap: 5px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
     color: var(--text-secondary);
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    padding: 7px 8px;
-    transition: all var(--transition);
+    font-weight: 600;
+    padding: 6px 8px;
+    transition: background var(--transition), color var(--transition), border-color var(--transition);
   }
 
   .inline-action:hover {
-    border-color: rgba(148, 163, 184, 0.42);
+    background: var(--bg-hover);
     color: var(--text-primary);
   }
 
   .error-message {
-    background: rgba(237, 66, 69, 0.1);
+    background: var(--danger-dim);
     color: var(--danger);
     padding: 12px;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     font-size: 13px;
     line-height: 1.5;
-    border: 1px solid rgba(237, 66, 69, 0.35);
+    border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
   }
 
-  :global(.mode-content .button) {
+  :global(.mode-content > .button) {
     width: 100%;
   }
 
   @media (max-width: 740px) {
     .mode-content {
       padding: 16px;
-      border-radius: 16px;
-    }
-
-    h3 {
-      font-size: 19px;
     }
 
     .heading-row {
@@ -676,18 +601,12 @@
 
     .action-row {
       flex-direction: column;
-      padding: 0;
     }
 
     :global(.action-row .button) {
       min-width: 0;
       width: 100%;
       flex: 1 1 auto;
-    }
-
-    .toggle-pill {
-      min-width: 80px;
-      padding-inline: 10px;
     }
   }
 </style>

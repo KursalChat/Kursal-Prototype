@@ -16,19 +16,23 @@ export interface MessageResponse {
   contactId: string; // hex of UserId bytes
   direction: "sent" | "received";
   content: string;
-  status: "sending" | "delivered" | "failed";
+  status: "sending" | "delivered" | "failed" | "queued";
   timestamp: number;
   replyTo: string | null; // hex of MessageId bytes
   reactions?: { emoji: string; userId: string }[];
   edited?: boolean;
-  fileDetails?: { filename: string; sizeBytes: number } | null;
+  fileDetails?: {
+    filename: string;
+    sizeBytes: number;
+    autodownloadPath?: string | null;
+  } | null;
 }
 
 export interface OtpResponse {
   otp: string;
 }
 
-export type NearbyOrigin = 'Bluetooth' | 'mDNS';
+export type NearbyOrigin = "Bluetooth" | "mDNS";
 
 export interface NearbyPeerResponse {
   peerId: string;
@@ -42,6 +46,11 @@ export type MessageReceivedPayload = MessageResponse;
 export interface ConnectionChangedPayload {
   contactId: string;
   status: "connecting" | "relay" | "holepunch" | "direct" | "disconnected";
+}
+
+export interface BackendSignalPayload {
+  signal: string;
+  payload: string;
 }
 
 export interface NearbyRequestPayload {
@@ -72,6 +81,7 @@ export interface FileOfferedPayload {
   contactId: string;
   filename: string;
   sizeBytes: number;
+  autodownload: string | null; // if specified, path to the auto downloaded
 }
 
 export interface FileTransferProgressPayload {

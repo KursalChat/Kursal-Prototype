@@ -51,7 +51,7 @@ impl Contact {
 
         let contacts = all
             .iter()
-            .filter_map(|el| match Contact::deserialize(el) {
+            .filter_map(|(_, el)| match Contact::deserialize(el) {
                 Ok(contact) => Some(contact),
                 Err(e) => {
                     log::warn!("Failed to deserialize contact: {e}");

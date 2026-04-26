@@ -2,11 +2,10 @@ use crate::{
     config::RelayConfig,
     health::{HealthState, start_health_server},
     identity::load_or_generate,
-    limiter::ConnectionLimiter,
 };
 use kursal_core::{
     KursalError, Result,
-    network::{BOOTSTRAP_PEERS, kademlia::KursalKadStore},
+    network::{BOOTSTRAP_PEERS, kademlia::KursalKadStore, limiter::ConnectionLimiter},
 };
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol, Swarm, SwarmBuilder,
@@ -35,7 +34,7 @@ pub async fn spawn_relay_swarm(config: &RelayConfig, config_path: &Path) -> Resu
     let peer_id = keypair.public().to_peer_id();
     log::info!("[relay] peer id: {peer_id}");
 
-    let mut swarm = SwarmBuilder::with_existing_identity(keypair)
+    let swarm = SwarmBuilder::with_existing_identity(keypair)
         .with_tokio()
         .with_tcp(
             Default::default(),
@@ -43,10 +42,21 @@ pub async fn spawn_relay_swarm(config: &RelayConfig, config_path: &Path) -> Resu
             libp2p::yamux::Config::default,
         )
         .map_err(|err| KursalError::Network(err.to_string()))?
-        .with_quic()
-        // `.with_dns()` wont work on android, hope no one tries to run the CLI on android 😭
+        .with_quic();
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    // TODO: maybe chance cloudflare to another DNS
+    let swarm = swarm.with_dns_config(
+        libp2p::dns::ResolverConfig::cloudflare(),
+        libp2p::dns::ResolverOpts::default(),
+    );
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let swarm = swarm
         .with_dns()
-        .map_err(|err| KursalError::Network(err.to_string()))?
+        .map_err(|err| KursalError::Network(format!("swarm dns error: {err}")))?;
+
+    let mut swarm = swarm
         .with_behaviour(
             |key| -> std::result::Result<_, Box<dyn std::error::Error + Send + Sync>> {
                 let local_peer_id = key.public().to_peer_id();

@@ -1,15 +1,15 @@
 <script lang="ts">
-  import { MessageSquare, UserPlus, Lock } from "lucide-svelte";
+  import { UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { contactsState } from "$lib/state/contacts.svelte";
 
   const hasContacts = $derived(contactsState.contacts.length > 0);
 </script>
 
-<div class="empty">
+<div class="empty" data-tauri-drag-region>
   <div class="empty-inner">
     <div class="icon-wrap">
-      <MessageSquare size={28} />
+      <img src="/winston.png" alt="Kursal Mascott" width="88" height="88" />
     </div>
     {#if hasContacts}
       <h2>Select a conversation</h2>
@@ -17,9 +17,6 @@
         Pick a contact from the sidebar to start chatting. All your messages are
         end-to-end encrypted.
       </p>
-      <div class="feature-line">
-        <Lock size={12} /> Peer-to-peer · no servers
-      </div>
     {:else}
       <h2>Welcome to Kursal</h2>
       <p>Add your first contact to start sending encrypted messages.</p>
@@ -37,12 +34,7 @@
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: radial-gradient(
-        800px 400px at 50% 20%,
-        rgba(99, 102, 241, 0.05),
-        transparent 60%
-      ),
-      var(--bg-primary);
+    background: transparent;
   }
 
   .empty-inner {
@@ -54,19 +46,10 @@
   .icon-wrap {
     width: 64px;
     height: 64px;
-    border-radius: 18px;
-    background: linear-gradient(
-      135deg,
-      var(--bg-tertiary),
-      rgba(99, 102, 241, 0.1)
-    );
-    border: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
     margin: 0 auto 18px;
-    color: var(--accent);
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.12);
   }
 
   h2 {
@@ -82,19 +65,6 @@
     font-size: 13.5px;
     line-height: 1.55;
     color: var(--text-secondary);
-  }
-
-  .feature-line {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 2px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: var(--bg-tertiary);
-    font-size: 11.5px;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
   }
 
   .add-btn {

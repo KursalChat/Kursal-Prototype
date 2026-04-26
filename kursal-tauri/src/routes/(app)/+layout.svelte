@@ -3,7 +3,6 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
@@ -17,6 +16,7 @@
   } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import StatusDot from "$lib/components/StatusDot.svelte";
+  import WinstonContactsTour from "$lib/components/WinstonContactsTour.svelte";
   import { setBadgeCount } from "$lib/api/window";
   import { uiState } from "$lib/state/ui.svelte";
 
@@ -158,13 +158,6 @@
       <Menu size={22} />
     </button>
     <span class="mobile-title">Kursal</span>
-    <button
-      class="mobile-menu"
-      onclick={handleAddContact}
-      aria-label="Add contact"
-    >
-      <UserPlus size={20} />
-    </button>
   </div>
 
   <aside class="sidebar" class:open={uiState.mobileSidebarOpen}>
@@ -176,6 +169,7 @@
           onclick={handleAddContact}
           title="Add contact"
           aria-label="Add contact"
+          data-tour="add-contact-btn"
         >
           <UserPlus size={17} />
         </button>
@@ -223,7 +217,11 @@
         <div class="empty-state column">
           <MessageSquare size={24} />
           <span>No contacts yet</span>
-          <button class="empty-cta" onclick={handleAddContact}>
+          <button
+            class="empty-cta"
+            onclick={handleAddContact}
+            data-tour="add-contact-empty"
+          >
             <UserPlus size={14} /> Add your first contact
           </button>
         </div>
@@ -307,10 +305,12 @@
   </main>
 </div>
 
+<WinstonContactsTour />
+
 <style>
   .shell {
     display: flex;
-    height: 100dvh;
+    height: 100%;
     overflow: hidden;
   }
 
@@ -327,11 +327,13 @@
   /* Sidebar */
   .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-secondary);
+    background: var(--panel);
+    backdrop-filter: blur(24px) saturate(140%);
+    -webkit-backdrop-filter: blur(24px) saturate(140%);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border);
+    box-shadow: inset -1px 0 0 var(--panel-border);
     overflow: hidden;
   }
 
@@ -343,6 +345,10 @@
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+  }
+
+  :global(html.mac) .sidebar-header {
+    padding-left: 78px;
   }
 
   .sidebar-header :global(button),
@@ -394,7 +400,7 @@
     transition: border-color var(--transition);
   }
   .search-wrap:focus-within {
-    border-color: rgba(129, 140, 248, 0.45);
+    border-color: var(--accent-selected);
   }
   .search-wrap input {
     flex: 1;
@@ -456,7 +462,7 @@
     transition: background var(--transition);
   }
   .empty-cta:hover {
-    background: rgba(129, 140, 248, 0.22);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
 
   .contact-row {
@@ -474,12 +480,16 @@
     background: var(--bg-hover);
   }
   .contact-row:active {
-    background: rgba(99, 102, 241, 0.2);
+    background: color-mix(in srgb, var(--accent-solid) 20%, transparent);
   }
   .contact-row.active {
-    background: linear-gradient(90deg, var(--accent-solid), #4338ca);
+    background: linear-gradient(
+      135deg,
+      var(--accent-solid),
+      color-mix(in srgb, var(--accent-solid), black 18%)
+    );
     color: #fff;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+    box-shadow: 0 4px 12px var(--accent-dim);
   }
   .contact-row.active .contact-name,
   .contact-row.active .contact-preview,
@@ -601,7 +611,7 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
-    background: var(--bg-secondary);
+    background: transparent;
     text-align: left;
     transition: background var(--transition);
   }
@@ -635,7 +645,7 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: var(--bg-primary);
+    background: transparent;
   }
 
   /* Mobile responsive */
@@ -683,9 +693,9 @@
       right: 0;
       height: var(--header-height);
       padding: 0 6px;
-      background: rgba(17, 24, 39, 0.85);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      background: var(--panel);
+      backdrop-filter: blur(20px) saturate(140%);
+      -webkit-backdrop-filter: blur(20px) saturate(140%);
       border-bottom: 1px solid var(--border);
       z-index: 30;
     }

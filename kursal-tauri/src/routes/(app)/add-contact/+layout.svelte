@@ -4,16 +4,16 @@
   import { QrCode, FileArchive, Radar } from "lucide-svelte";
 
   const methods = [
-    { label: "One-Time Code", href: "/add-contact/otp", icon: QrCode },
-    { label: "Contact File", href: "/add-contact/ltc", icon: FileArchive },
-    { label: "Nearby", href: "/add-contact/nearby", icon: Radar },
+    { label: "One-Time Code", href: "/add-contact/otp", icon: QrCode, tour: "otp-tab" },
+    { label: "Long-Term Code", href: "/add-contact/ltc", icon: FileArchive, tour: "ltc-tab" },
+    { label: "Nearby", href: "/add-contact/nearby", icon: Radar, tour: "nearby-tab" },
   ];
 
   let { children } = $props();
 </script>
 
 <div class="add-contact">
-  <header class="ac-header">
+  <header class="ac-header" data-tauri-drag-region>
     <h2>Add Contact</h2>
   </header>
 
@@ -22,6 +22,7 @@
       <button
         class="tab"
         data-active={page.url.pathname.startsWith(m.href)}
+        data-tour={m.tour}
         onclick={() => goto(m.href)}
       >
         <m.icon size={15} />
@@ -48,8 +49,10 @@
     padding: 0 16px;
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-secondary);
+    background: var(--panel);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow: inset 0 -1px 0 var(--panel-border);
     flex-shrink: 0;
   }
 
@@ -63,8 +66,10 @@
     display: flex;
     gap: 4px;
     padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg-secondary);
+    background: var(--panel);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow: inset 0 -1px 0 var(--panel-border);
     flex-shrink: 0;
     overflow-x: auto;
   }
@@ -90,9 +95,9 @@
 
   .tab[data-active="true"],
   .tab[data-active="true"]:hover {
-    background: var(--accent-selected);
+    background: var(--accent-solid);
     color: #fff;
-    border-color: rgba(165, 180, 252, 0.7);
+    border-color: var(--accent-solid);
   }
 
   .ac-body {

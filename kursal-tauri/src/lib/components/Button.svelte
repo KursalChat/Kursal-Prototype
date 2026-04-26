@@ -41,12 +41,12 @@
   }
 
   .button.primary {
-    background: var(--accent);
+    background: var(--accent-solid);
     color: #fff;
   }
 
   .button.primary:hover:not(:disabled) {
-    background: var(--accent-hover);
+    background: color-mix(in srgb, var(--accent-solid), white 10%);
   }
 
   .button.secondary {
@@ -62,10 +62,13 @@
   .button.danger {
     background: var(--danger);
     color: #fff;
+    border-color: var(--danger);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
   }
 
   .button.danger:hover:not(:disabled) {
-    opacity: 0.9;
+    background: var(--danger-hover);
+    border-color: var(--danger-hover);
   }
 
   .button:disabled {

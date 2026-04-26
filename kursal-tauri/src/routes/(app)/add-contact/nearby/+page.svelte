@@ -3,9 +3,12 @@
   import { startNearby, stopNearby, getNearbyPeers, connectNearby, acceptNearby, declineNearby } from '$lib/api/nearby';
   import { nearbyState } from '$lib/state/nearby.svelte';
   import { notifications } from '$lib/state/notifications.svelte';
+  import { settingsState } from '$lib/state/settings.svelte';
   import Button from '$lib/components/Button.svelte';
   import type { NearbyOrigin } from '$lib/types';
-  import { Bluetooth, Wifi } from 'lucide-svelte';
+  import { Bluetooth, Wifi, WifiOff } from 'lucide-svelte';
+
+  const mdnsDisabled = $derived(settingsState.loaded && !settingsState.nearbyShare);
 
   let connecting = $state<Set<string>>(new Set());
   let pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -19,6 +22,11 @@
   }
 
   onMount(async () => {
+    try {
+      await settingsState.load();
+    } catch (e) {
+      console.error('Settings load failed:', e);
+    }
     try {
       const sessionName = await startNearby();
       nearbyState.active = true;
@@ -92,6 +100,19 @@
 </script>
 
 <div class="nearby-page">
+  {#if mdnsDisabled}
+    <section class="banner">
+      <WifiOff size={16} strokeWidth={2.25} />
+      <div class="banner-text">
+        <p class="banner-title">Wi-Fi discovery off</p>
+        <p class="banner-body">
+          Nearby Share is disabled in Settings, so mDNS over Wi-Fi is off. Only Bluetooth discovery
+          is active, and only while this page is open.
+        </p>
+      </div>
+    </section>
+  {/if}
+
   <section class="identity-card">
     <div>
       <p class="kicker">Your Nearby Name</p>
@@ -180,61 +201,97 @@
     justify-content: space-between;
     align-items: center;
     border: 1px solid var(--border);
-    border-radius: 16px;
-    background: linear-gradient(160deg, rgba(30, 41, 59, 0.64), rgba(15, 23, 42, 0.74));
-    padding: 16px 18px;
-    box-shadow: var(--glow);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    padding: 14px 16px;
+  }
+
+  .banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+    background: color-mix(in srgb, var(--warning) 12%, transparent);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+
+  .banner :global(svg) {
+    color: var(--warning);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .banner-text {
+    min-width: 0;
+  }
+
+  .banner-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .banner-body {
+    margin: 3px 0 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
   }
 
   .kicker {
     margin: 0;
     font-size: 11px;
+    font-weight: 700;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
   }
 
   .identity-card h3 {
-    margin: 6px 0 0;
-    font-size: 18px;
+    margin: 4px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
     letter-spacing: -0.01em;
   }
 
   .status {
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-muted);
-    border: 1px solid rgba(148, 163, 184, 0.3);
-    background: rgba(30, 41, 59, 0.56);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    background: var(--bg-input);
     border-radius: 999px;
-    padding: 6px 10px;
+    padding: 5px 10px;
   }
 
   .status.active {
-    color: #c7d2fe;
-    border-color: rgba(129, 140, 248, 0.42);
-    background: rgba(99, 102, 241, 0.16);
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--accent-dim);
   }
 
   .panel {
     border: 1px solid var(--border);
-    border-radius: 16px;
-    background: linear-gradient(160deg, rgba(30, 41, 59, 0.64), rgba(15, 23, 42, 0.74));
-    box-shadow: var(--glow);
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
     overflow: hidden;
   }
 
   .panel.warning {
-    border-color: rgba(251, 191, 36, 0.36);
+    border-color: color-mix(in srgb, var(--warning) 40%, transparent);
   }
 
   .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border);
-    padding: 12px 14px;
-    background: rgba(15, 23, 42, 0.4);
+    border-bottom: 1px solid var(--border-light);
+    padding: 10px 14px;
+    background: var(--bg-secondary);
   }
 
   .panel-header h4,
@@ -243,10 +300,11 @@
   }
 
   .panel-header h4 {
-    font-size: 13px;
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-secondary);
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
   }
 
   .panel-header p {
@@ -262,9 +320,9 @@
   }
 
   .row-item {
-    border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 12px;
-    background: rgba(15, 23, 42, 0.58);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
     padding: 12px;
     display: flex;
     justify-content: space-between;
@@ -279,7 +337,7 @@
   .row-title {
     margin: 0;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--text-primary);
     display: inline-flex;
     align-items: center;
@@ -292,19 +350,19 @@
     align-items: center;
     gap: 4px;
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #a5b4fc;
-    background: rgba(99, 102, 241, 0.14);
-    border: 1px solid rgba(129, 140, 248, 0.35);
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
     padding: 2px 8px;
     border-radius: 999px;
   }
 
   .origin-badge.bluetooth {
-    color: #7dd3fc;
-    background: rgba(56, 189, 248, 0.14);
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.12);
     border-color: rgba(56, 189, 248, 0.35);
   }
 
@@ -322,7 +380,7 @@
   .empty {
     padding: 18px 14px;
     color: var(--text-muted);
-    font-size: 14px;
+    font-size: 13px;
   }
 
   @media (max-width: 640px) {

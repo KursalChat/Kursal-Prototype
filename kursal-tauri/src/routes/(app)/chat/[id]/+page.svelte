@@ -7,6 +7,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
+  import { settingsState } from "$lib/state/settings.svelte";
   import {
     sendText,
     sendFileOffer,
@@ -19,6 +20,7 @@
     sendTypingIndicator,
   } from "$lib/api/messages";
   import { shareProfile } from "$lib/api/identity";
+  import { OS } from "$lib/api/window";
   import {
     pickFileForSend,
     pickFileForReceive,
@@ -36,6 +38,7 @@
   import ChatHeader from "./ChatHeader.svelte";
   import MessageBubble from "./MessageBubble.svelte";
   import MessageComposer from "./MessageComposer.svelte";
+  import OfflineQueueBar from "./OfflineQueueBar.svelte";
   import ActionSheet from "./ActionSheet.svelte";
   import FileConfirmModal from "./FileConfirmModal.svelte";
   import EmojiPicker from "$lib/components/EmojiPicker.svelte";
@@ -95,6 +98,14 @@
   let showShareBanner = $derived(
     browser && contact && !contact.profileShared && !dismissedBanner,
   );
+
+  let flushingQueue = $state(false);
+  const queuedList = $derived(
+    contactId ? messagesState.queuedFor(contactId) : [],
+  );
+  const queuedCount = $derived(queuedList.length);
+  const QUEUE_THRESHOLD = 15;
+  const QUEUE_INTERVAL_MS = 5 * 60 * 1000;
 
   async function handleShareQuickProfile() {
     if (!browser || !contactId) return;
@@ -253,6 +264,10 @@
   let lastTypingSentAt = 0;
   function maybeSendTyping() {
     if (!contactId) return;
+    if (!settingsState.typingIndicators) {
+      lastTypingSentAt = 0;
+      return;
+    }
     if (!inputText.trim()) {
       lastTypingSentAt = 0;
       return;
@@ -437,6 +452,10 @@
       }
     })();
 
+    const flushInterval = setInterval(() => {
+      if (queuedCount > 0 && !flushingQueue) void flushQueue();
+    }, QUEUE_INTERVAL_MS);
+
     let contactMissingTimer: ReturnType<typeof setTimeout> | null = null;
     if (!contact && !contactsState.loading) {
       contactMissingTimer = setTimeout(() => {
@@ -453,6 +472,7 @@
       window.removeEventListener("keydown", onGlobalKey);
       document.removeEventListener("visibilitychange", onVisibility);
       if (contactMissingTimer) clearTimeout(contactMissingTimer);
+      clearInterval(flushInterval);
       if (pendingScrollFrame) window.cancelAnimationFrame(pendingScrollFrame);
       for (const t of completedFileTimers.values()) clearTimeout(t);
       completedFileTimers.clear();
@@ -487,6 +507,33 @@
     listEl.addEventListener("click", handleClick);
     return () => {
       listEl?.removeEventListener("click", handleClick);
+    };
+  });
+
+  // Re-pin to bottom when message content grows (image loads, file progress
+  // appearing, etc.) and the user was already at the bottom.
+  $effect(() => {
+    if (!listEl) return;
+    const el = listEl;
+    const ro = new ResizeObserver(() => {
+      if (isScrolledToBottom) {
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+    for (const child of Array.from(el.children)) {
+      ro.observe(child);
+    }
+    const mo = new MutationObserver((mutations) => {
+      for (const mut of mutations) {
+        for (const node of mut.addedNodes) {
+          if (node instanceof Element) ro.observe(node);
+        }
+      }
+    });
+    mo.observe(el, { childList: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
     };
   });
 
@@ -576,30 +623,30 @@
       return;
     }
 
+    if (!contactId) return;
     const replyTo = replyingToMessageId;
     inputText = "";
     lastTypingSentAt = 0;
-    sending = true;
-    try {
-      if (!contactId) return;
-      const messageId = await sendText(contactId, text, replyTo);
-      messagesState.appendOptimistic({
-        id: messageId,
-        contactId,
-        direction: "sent",
-        content: text,
-        status: "sending",
-        timestamp: Date.now(),
-        replyTo,
+    cancelReply();
+
+    const cid = contactId;
+    const pendingId = crypto.randomUUID().replace(/-/g, "");
+    messagesState.appendOptimistic({
+      id: pendingId,
+      contactId: cid,
+      direction: "sent",
+      content: text,
+      status: "sending",
+      timestamp: Date.now(),
+      replyTo,
+    });
+
+    void sendText(cid, text, replyTo)
+      .then((realId) => messagesState.replaceId(pendingId, cid, realId))
+      .catch((e) => {
+        messagesState.updateStatusIfSending(pendingId, cid, "queued");
+        console.error("Send failed, queued for offline:", e);
       });
-      cancelReply();
-    } catch (e) {
-      inputText = text;
-      notifications.push("Failed to send message", "error");
-      console.error("Send failed:", e);
-    } finally {
-      sending = false;
-    }
   }
 
   async function stageFileForSend(backendPath: string, filename: string) {
@@ -658,7 +705,11 @@
         status: "sending",
         timestamp: Date.now(),
         replyTo: null,
-        fileDetails: { filename: file.filename, sizeBytes: fileSize },
+        fileDetails: {
+          filename: file.filename,
+          sizeBytes: fileSize,
+          autodownloadPath: file.backendPath,
+        },
       });
       pendingFile = null;
     } catch (e) {
@@ -698,18 +749,72 @@
           resolved.deferredTargetUri,
           msg.fileDetails.filename,
         );
+      } else {
+        messagesState.setAutodownloadPath(
+          msg.id,
+          msg.contactId,
+          resolved.backendPath,
+        );
       }
       fileOfferActionState[msg.id] = "accepted";
       notifications.push("File transfer accepted", "success");
     } catch (e) {
       fileOfferActionState[msg.id] = "idle";
-      notifications.push(
-        `Failed to accept file: ${e instanceof Error ? e.message : e}`,
-        "error",
-      );
+      const raw = e instanceof Error ? e.message : String(e);
+      const lower = raw.toLowerCase();
+      const isAccessDenied =
+        OS === "windows" &&
+        (lower.includes("accès refusé") ||
+          lower.includes("acces refuse") ||
+          lower.includes("access is denied") ||
+          lower.includes("access denied") ||
+          lower.includes("permission denied") ||
+          lower.includes("os error 5"));
+      const hint = isAccessDenied
+        ? "Windows blocked write. Try Downloads, or allow Kursal in Controlled Folder Access."
+        : `Failed to accept file: ${raw}`;
+      notifications.push(hint, "error");
       console.error("Accept file offer failed", e);
     }
   }
+
+  async function flushQueue() {
+    if (!contactId || flushingQueue) return;
+    const cid = contactId;
+    const items = messagesState.queuedFor(cid);
+    if (items.length === 0) return;
+    flushingQueue = true;
+    try {
+      for (const msg of items) {
+        const pendingId = msg.id;
+        messagesState.updateStatus(pendingId, cid, "sending");
+        try {
+          if (msg.fileDetails) {
+            messagesState.updateStatus(pendingId, cid, "queued");
+            continue;
+          }
+          const realId = await sendText(cid, msg.content, msg.replyTo);
+          messagesState.replaceId(pendingId, cid, realId);
+          messagesState.updateStatus(realId, cid, "delivered");
+        } catch (e) {
+          messagesState.updateStatus(pendingId, cid, "queued");
+          console.error("Queue flush: send failed", e);
+        }
+      }
+    } finally {
+      flushingQueue = false;
+    }
+  }
+
+  let lastFlushAt = 0;
+  $effect(() => {
+    if (!contactId) return;
+    if (queuedCount >= QUEUE_THRESHOLD && !flushingQueue) {
+      if (Date.now() - lastFlushAt < 30000) return;
+      lastFlushAt = Date.now();
+      void flushQueue();
+    }
+  });
 
   async function handleResend(msg: MessageResponse) {
     if (!contactId) return;
@@ -736,7 +841,11 @@
           status: "sending",
           timestamp: Date.now(),
           replyTo: null,
-          fileDetails: { filename: prepared.filename, sizeBytes: fileSize },
+          fileDetails: {
+            filename: prepared.filename,
+            sizeBytes: fileSize,
+            autodownloadPath: prepared.backendPath,
+          },
         });
       } catch (e) {
         notifications.push("Failed to resend file", "error");
@@ -962,6 +1071,12 @@
       </button>
     {/if}
 
+    <OfflineQueueBar
+      count={queuedCount}
+      flushing={flushingQueue}
+      onFlush={flushQueue}
+    />
+
     <MessageComposer
       {contact}
       bind:inputText
@@ -1055,12 +1170,7 @@
     height: 100%;
     min-height: 0;
     position: relative;
-    background: radial-gradient(
-        1200px 600px at 50% -100px,
-        rgba(99, 102, 241, 0.06),
-        transparent 60%
-      ),
-      var(--bg-primary);
+    background: transparent;
   }
 
   .share-banner {
@@ -1181,7 +1291,7 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
-    background: rgba(17, 24, 39, 0.9);
+    background: var(--surface);
     padding: 4px 12px;
     border-radius: 999px;
     border: 1px solid var(--border);
@@ -1318,7 +1428,7 @@
   .drop-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(15, 23, 42, 0.78);
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     display: flex;

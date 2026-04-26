@@ -13,23 +13,50 @@ use auth::auth_middleware;
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::{Path, Query, State},
+    extract::{
+        Path, Query, State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
+    },
     middleware,
-    routing::{delete, get, patch, post},
+    response::IntoResponse,
+    routing::{any, delete, get, patch, post},
 };
+use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::{IpAddr, SocketAddr},
     sync::Arc,
 };
-use tokio::sync::{Mutex, MutexGuard, mpsc, oneshot};
+use tokio::sync::{Mutex, MutexGuard, broadcast, mpsc, oneshot};
 use tower_http::cors::CorsLayer;
 
 pub mod auth;
 pub mod iprecord;
 
 type Result<T> = std::result::Result<T, String>;
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalApiConfig {
+    pub enabled: bool,
+    pub host_on_network: bool,
+    pub port: u16,
+}
+impl LocalApiConfig {
+    pub fn serialize(&self) -> crate::Result<Vec<u8>> {
+        bincode::serialize(self).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+    pub fn deserialize(bytes: &[u8]) -> crate::Result<Self> {
+        bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
+    }
+}
+
+#[derive(Clone)]
+pub struct CoreEventEmitter {
+    pub event: String,
+    pub payload: serde_json::Value,
+}
 
 #[derive(Clone)]
 pub struct APIAppState {
@@ -40,6 +67,7 @@ pub struct APIAppState {
     core_cmd_tx: mpsc::Sender<CoreCommand>,
     network: Arc<Mutex<NetworkManager>>,
     pending_nearby: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    event_tx: broadcast::Sender<CoreEventEmitter>,
 }
 
 impl StateWrapper for APIAppState {
@@ -59,10 +87,12 @@ impl StateWrapper for APIAppState {
 
 pub async fn run_server(
     auth_token: String,
+    api_config: LocalApiConfig,
     core_cmd_tx: mpsc::Sender<CoreCommand>,
     db: SharedDatabase,
     network: Arc<Mutex<NetworkManager>>,
     pending_nearby: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    event_tx: broadcast::Sender<CoreEventEmitter>,
 ) -> crate::Result<()> {
     let state = APIAppState {
         auth_token,
@@ -71,11 +101,13 @@ pub async fn run_server(
         db,
         network,
         pending_nearby,
+        event_tx,
     };
 
     let app = Router::new()
         .layer(CorsLayer::new())
         .route("/", get(root))
+        .route("/ws", any(ws_handler))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -86,8 +118,6 @@ pub async fn run_server(
         .route("/self/profile", post(api_self_post_profile))
         .route("/self/peer_id", get(api_self_get_peer_id))
         .route("/self/peer_id", delete(api_self_rotate_peer_id))
-        .route("/self/relay_server", post(api_self_relay_server_enable))
-        .route("/self/relay_server", delete(api_self_relay_server_disable))
         //
         .route("/otp/generate", post(api_otp_generate))
         .route("/otp/publish", post(api_otp_publish))
@@ -120,6 +150,7 @@ pub async fn run_server(
             post(api_contact_share_profile),
         )
         .route("/contact/{user_id}", delete(api_contact_remove))
+        .route("/contacts/blocked", get(api_contact_blocked_list))
         .route("/contact/{user_id}/block", post(api_contact_block))
         .route("/contact/{user_id}/unblock", post(api_contact_unblock))
         //
@@ -153,10 +184,17 @@ pub async fn run_server(
         .with_state(state)
         .into_make_service_with_connect_info::<SocketAddr>();
 
-    // TODO: change IP addr to be in config
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:4892")
-        .await
-        .map_err(|err| KursalError::Network(err.to_string()))?;
+    let listener = tokio::net::TcpListener::bind(format!(
+        "{}:{}",
+        if api_config.host_on_network {
+            "0.0.0.0"
+        } else {
+            "127.0.0.1"
+        },
+        api_config.port
+    )) // "127.0.0.1:4892"
+    .await
+    .map_err(|err| KursalError::Network(err.to_string()))?;
 
     axum::serve(listener, app)
         .await
@@ -166,7 +204,51 @@ pub async fn run_server(
 }
 
 async fn root() -> String {
-    return format!("Kursal v{}\n", env!("CARGO_PKG_VERSION"));
+    format!("Kursal v{}\n", env!("CARGO_PKG_VERSION"))
+}
+
+//
+
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<APIAppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
+}
+
+async fn handle_socket(socket: WebSocket, state: APIAppState) {
+    let mut event_rx = state.event_tx.subscribe();
+    let (mut sink, mut stream) = socket.split();
+
+    let send_task = tokio::spawn(async move {
+        loop {
+            match event_rx.recv().await {
+                Ok(event) => {
+                    let msg = serde_json::json!({
+                        "event": event.event,
+                        "payload": event.payload,
+                    });
+
+                    if sink
+                        .send(Message::Text(msg.to_string().into()))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    log::warn!("Websocket client lagged, dropped {n} events");
+                }
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+
+    while let Some(Ok(msg)) = stream.next().await {
+        if matches!(msg, Message::Close(_)) {
+            break;
+        }
+    }
+
+    send_task.abort();
 }
 
 //
@@ -268,6 +350,7 @@ async fn api_contact_remove(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
 ) -> Result<()> {
+    // TODO: remove file transfers
     cmd_wrapper::remove_contact(state, contact_id)
         .await
         .map_err(Into::into)
@@ -401,6 +484,15 @@ async fn api_contact_unblock(
         .map_err(Into::into)
 }
 
+async fn api_contact_blocked_list(
+    State(state): State<APIAppState>,
+) -> Result<Json<Vec<ContactResponse>>> {
+    cmd_wrapper::get_blocked_contacts(state)
+        .await
+        .map(Json)
+        .map_err(Into::into)
+}
+
 async fn api_self_rotate_peer_id(State(state): State<APIAppState>) -> Result<()> {
     cmd_wrapper::rotate_peer_id(state).await.map_err(Into::into)
 }
@@ -413,18 +505,6 @@ async fn api_self_get_peer_id(State(state): State<APIAppState>) -> Result<String
 
 async fn api_self_get_user_id(State(state): State<APIAppState>) -> Result<String> {
     cmd_wrapper::get_local_user_id_hex(state)
-        .await
-        .map_err(Into::into)
-}
-
-async fn api_self_relay_server_enable(State(state): State<APIAppState>) -> Result<()> {
-    cmd_wrapper::set_relay_server_enabled(state, true)
-        .await
-        .map_err(Into::into)
-}
-
-async fn api_self_relay_server_disable(State(state): State<APIAppState>) -> Result<()> {
-    cmd_wrapper::set_relay_server_enabled(state, false)
         .await
         .map_err(Into::into)
 }

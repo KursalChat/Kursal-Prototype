@@ -496,14 +496,19 @@ pub async fn handle_core_command(
                     .try_fill_bytes(&mut my_random)
                     .map_err(|err| KursalError::Crypto(err.to_string()))?;
 
+                let now = get_timestamp_secs()?;
+
                 let entry = FileTransferEntry {
                     path: file_path,
                     my_random,
+                    shared_at: now,
+                    last_accessed_at: None,
+                    size_bytes,
                 };
 
                 db.0.lock().await.raw_write(
                     TABLE_FILE_TRANSFERS,
-                    &format!("{contact_id}:{}", hex::encode(offer_id.0)),
+                    &format!("send:{contact_id}:{}", hex::encode(offer_id.0)),
                     &entry
                         .serialize()
                         .map_err(|err| KursalError::Storage(err.to_string()))?,
@@ -539,7 +544,10 @@ pub async fn handle_core_command(
                 let entry_bytes =
                     db.0.lock()
                         .await
-                        .raw_read(TABLE_FILE_TRANSFERS, &format!("{contact_id}:{offer_id}"))?
+                        .raw_read(
+                            TABLE_FILE_TRANSFERS,
+                            &format!("recv:{contact_id}:{offer_id}"),
+                        )?
                         .ok_or(KursalError::Storage(
                             "Could not find file offer".to_string(),
                         ))?;
@@ -568,7 +576,7 @@ pub async fn handle_core_command(
                 };
                 db.0.lock().await.raw_write(
                     TABLE_FILE_TRANSFERS,
-                    &format!("{contact_id}:{offer_id}"),
+                    &format!("recv:{contact_id}:{offer_id}"),
                     &updated_entry.serialize()?,
                 )?;
 

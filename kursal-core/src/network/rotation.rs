@@ -14,7 +14,7 @@ use crate::{
     },
     storage::{
         SharedDatabase, TABLE_SETTINGS, get_dilithium_pub, get_local_identity_pub,
-        get_timestamp_secs,
+        get_peer_rotation_interval, get_timestamp_secs,
     },
 };
 use libp2p::PeerId;
@@ -38,7 +38,9 @@ impl NetworkManager {
         let secondary = SwarmHandle::spawn(
             identity,
             self.event_tx.clone(),
-            self.primary.relay_server_enabled,
+            self.primary.relay_config.clone(),
+            self.primary.mdns_enabled,
+            self.primary.port,
         )
         .await?;
 
@@ -141,14 +143,11 @@ impl NetworkManager {
         network: Arc<Mutex<NetworkManager>>,
     ) {
         loop {
-            let secs = {
-                let lock = db.0.lock().await;
-                lock.raw_read(TABLE_SETTINGS, "rotation_interval_secs")
-                    .ok()
-                    .flatten()
-                    .and_then(|b| b.try_into().ok().map(u64::from_be_bytes))
-                    .unwrap_or(30 * 60 * 60) // 30 hours
-            };
+            let secs = get_peer_rotation_interval(&*db.0.lock().await);
+
+            if secs == 0u64 {
+                break;
+            }
 
             tokio::time::sleep(Duration::from_secs(secs.max(300))).await;
 

@@ -1,7 +1,7 @@
 use futures::AsyncReadExt;
 use libp2p::PeerId;
 use libsignal_protocol::{DeviceId, ProtocolAddress};
-use tokio::sync::mpsc;
+use tokio::{fs::create_dir_all, sync::mpsc};
 use zeroize::Zeroize;
 
 use crate::{
@@ -25,13 +25,20 @@ use crate::{
         enums::{DeliveryReceipt, Direction, KursalMessage, MessageId, MessageStatus},
     },
     network::swarm::{FILE_CHUNK_SIZE, MAX_MESSAGE_SIZE, NetworkEvent, SwarmCommand},
-    storage::{SharedDatabase, TABLE_FILE_TRANSFERS, TABLE_SETTINGS, get_timestamp_secs},
+    storage::{
+        SharedDatabase, TABLE_FILE_TRANSFERS, TABLE_SETTINGS,
+        filetransfer::{
+            get_auto_download_storage, get_auto_download_storage_for, sanitize_filename,
+        },
+        get_auto_accept_config, get_auto_download_config, get_timestamp_secs,
+    },
 };
 
 pub async fn handle_incoming(
     from: PeerId,
     ciphertext: Vec<u8>,
     db: SharedDatabase,
+    cache_dir: &std::path::Path,
     cmd_tx: &mpsc::Sender<SwarmCommand>,
     event_tx: &mpsc::Sender<AppEvent>,
 ) -> Result<()> {
@@ -116,7 +123,7 @@ pub async fn handle_incoming(
             }
 
             let key = format!(
-                "{}:{}",
+                "recv:{}:{}",
                 hex::encode(contact.user_id.0),
                 hex::encode(chunk.transfer_id)
             );
@@ -381,7 +388,7 @@ pub async fn handle_incoming(
         }
 
         KursalMessage::FileOffer(ref file) => {
-            let filename = file.filename.clone();
+            let filename = sanitize_filename(&file.filename);
             let offer_id = file.id;
             let size_bytes = file.size_bytes;
             let file_random = file.random;
@@ -398,7 +405,55 @@ pub async fn handle_incoming(
                 reactions: Vec::with_capacity(0),
             };
 
-            stored.save(&*db.clone().0.lock().await)?;
+            stored.save(&*db.0.lock().await)?;
+
+            let mut autodownload = None;
+            let auto_accept = get_auto_accept_config(&*db.0.lock().await);
+
+            if let Ok(auto_accept) = auto_accept
+                && auto_accept.size_cap_bytes >= size_bytes
+                && ((auto_accept.mode == "verified" && contact.verified)
+                    || auto_accept.mode == "all")
+            {
+                let auto_config = get_auto_download_config(&*db.0.lock().await);
+                match auto_config {
+                    Ok(auto_config) => {
+                        let contact_hex = hex::encode(contact.user_id.0);
+
+                        let size = if auto_config.scope == "all_contacts" {
+                            get_auto_download_storage(cache_dir.to_path_buf())
+                        } else {
+                            get_auto_download_storage_for(
+                                cache_dir.to_path_buf(),
+                                contact_hex.clone(),
+                            )
+                        };
+
+                        match size {
+                            Ok(size) => {
+                                if size.saturating_add(size_bytes) <= auto_config.limit_bytes {
+                                    let root = cache_dir.join("files").join(contact_hex);
+                                    create_dir_all(&root).await.map_err(KursalError::Io)?;
+
+                                    let path = root.join(format!(
+                                        "{}-{}",
+                                        hex::encode(offer_id.0),
+                                        filename
+                                    ));
+
+                                    autodownload = Some(path.to_string_lossy().into_owned());
+                                }
+                            }
+                            Err(err) => {
+                                log::error!("Could not get auto download folder size: {err}");
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::error!("Could not auto download: {err}");
+                    }
+                }
+            }
 
             let entry = FileIncomingEntry {
                 their_random: file_random,
@@ -408,7 +463,7 @@ pub async fn handle_incoming(
             db.0.lock().await.raw_write(
                 TABLE_FILE_TRANSFERS,
                 &format!(
-                    "{}:{}",
+                    "recv:{}:{}",
                     hex::encode(contact.user_id.0),
                     hex::encode(offer_id.0)
                 ),
@@ -421,6 +476,7 @@ pub async fn handle_incoming(
                     filename,
                     offer_id,
                     size_bytes,
+                    autodownload,
                 })
                 .await
                 .map_err(|err| KursalError::Network(err.to_string()))?;
@@ -436,15 +492,27 @@ pub async fn handle_incoming(
                     .raw_read(
                         TABLE_FILE_TRANSFERS,
                         &format!(
-                            "{}:{}",
+                            "send:{}:{}",
                             hex::encode(contact.user_id.0),
                             hex::encode(file.offer_id.0)
                         ),
                     )?
                     .ok_or(KursalError::Storage(
-                        "Could not find file transfer".to_string(),
+                        "Could not find file transfer (is it revoked?)".to_string(),
                     ))?;
-            let file_entry = FileTransferEntry::deserialize(&file_entry_bytes)?;
+            let mut file_entry = FileTransferEntry::deserialize(&file_entry_bytes)?;
+
+            let now = get_timestamp_secs()?;
+            file_entry.last_accessed_at = Some(now);
+            db.0.lock().await.raw_write(
+                TABLE_FILE_TRANSFERS,
+                &format!(
+                    "send:{}:{}",
+                    hex::encode(contact.user_id.0),
+                    hex::encode(file.offer_id.0)
+                ),
+                &file_entry.serialize()?,
+            )?;
 
             let cmd_tx_clone = cmd_tx.clone();
 

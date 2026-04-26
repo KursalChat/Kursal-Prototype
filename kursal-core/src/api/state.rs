@@ -1,9 +1,10 @@
 use crate::{
     api::{AppEvent, CoreCommand},
+    identity::keychain::KeychainConfig,
     network::NetworkManager,
     storage::SharedDatabase,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::sync::{Mutex, mpsc, oneshot};
 
 pub struct AppState {
@@ -12,4 +13,13 @@ pub struct AppState {
     pub app_event_tx: mpsc::Sender<AppEvent>,
     pub core_cmd_tx: mpsc::Sender<CoreCommand>,
     pub pending_nearby: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    pub db_path: PathBuf,
+    pub deep_links: Mutex<Option<Vec<DeepLink>>>,
+    pub keychain_config: KeychainConfig,
+}
+
+#[derive(Debug)]
+pub struct DeepLink {
+    pub category: Option<String>,
+    pub path: String,
 }

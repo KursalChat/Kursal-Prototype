@@ -13,17 +13,23 @@
     "windows": [
       {
         "title": "Kursal",
-        "width": 1024,
-        "height": 768,
+        "width": 1080,
+        "height": 780,
         "center": true,
         "minWidth": 500,
         "minHeight": 300,
         "userAgent": "KursalChat/0.1.0",
-        "zoomHotkeysEnabled": false
+        "zoomHotkeysEnabled": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' ipc://localhost https://ipc.localhost"
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
+      },
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: asset: http://asset.localhost https://asset.localhost; media-src 'self' asset: http://asset.localhost https://asset.localhost; font-src 'self'; connect-src 'self' ipc://localhost https://ipc.localhost asset: http://asset.localhost https://asset.localhost"
     }
   },
   "bundle": {
@@ -65,6 +71,17 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ0MzA0M0E0NEY3ODNENQpSV1RWZy9kRU9nUkRCRTRhb3ErY0NqandDRFNTZ2p1azVFQjNpaUZBZkZ6RGpUY0MwRDZIdE1sSwo=",
       "endpoints": ["https://app.kursal.chat/latest.json"]
+    },
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["kursal"],
+          "appLink": false
+        }
+      ],
+      "desktop": {
+        "schemes": ["kursal"]
+      }
     }
   }
 }

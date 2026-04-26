@@ -1,5 +1,5 @@
-use kursal_cli::CLIArgs;
 use clap::Parser;
+use kursal_cli::CLIArgs;
 
 #[tokio::main]
 pub async fn main() {

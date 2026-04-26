@@ -9,8 +9,16 @@
   import { nearbyState } from "$lib/state/nearby.svelte";
   import { typingState } from "$lib/state/typing.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
+  import { appearanceState } from "$lib/state/appearance.svelte";
+  import { prefsState } from "$lib/state/prefs.svelte";
+  import { settingsState } from "$lib/state/settings.svelte";
+  import { notifyMessage, getPermission } from "$lib/api/system-notify";
+  import { frontendReady } from "$lib/api/identity";
+  import { OS } from "$lib/api/window";
   import { finalizeDeferredReceiveTarget } from "$lib/utils/file-transfer-paths";
+  import { acceptFileOffer } from "$lib/api/messages";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
+  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
   import type {
     MessageReceivedPayload,
     ConnectionChangedPayload,
@@ -23,6 +31,7 @@
     FileTransferProgressPayload,
     FileReceivedPayload,
     TypingIndicatorPayload,
+    BackendSignalPayload,
   } from "$lib/types";
 
   let { children } = $props();
@@ -35,6 +44,12 @@
   }
 
   onMount(() => {
+    void frontendReady();
+    if (OS === "macos") document.documentElement.classList.add("mac");
+    appearanceState.init();
+    prefsState.init();
+    void settingsState.load();
+    void getPermission();
     const unlistenPromises: Array<Promise<() => void>> = [];
     baseTitle = document.title || "Kursal";
 
@@ -63,6 +78,22 @@
       }
     });
 
+    // Listen to backend_signal event
+    unlistenPromises.push(
+      listen<BackendSignalPayload>("backend_signal", (event) => {
+        const signal = event.payload.signal;
+        const payload = event.payload.payload;
+
+        if (signal == "open_settings") {
+          goto("/settings");
+        } else if (signal == "open_otp") {
+          goto(`/add-contact/otp?receive=${encodeURIComponent(payload)}`);
+        } else if (signal == "handle_incoming_error") {
+          notifications.push(payload || "Incoming message error", "error");
+        }
+      }),
+    );
+
     // Listen to message_received event
     unlistenPromises.push(
       listen<MessageReceivedPayload>("message_received", (event) => {
@@ -74,6 +105,14 @@
         if (document.hidden) {
           backgroundUnread += 1;
           refreshTitle();
+        }
+        const onThisChat =
+          !document.hidden &&
+          $page.url.pathname === `/chat/${payload.contactId}`;
+        if (!onThisChat) {
+          const name =
+            contactsState.getById(payload.contactId)?.displayName ?? "Someone";
+          void notifyMessage({ senderName: name, body: payload.content });
         }
       }),
     );
@@ -234,7 +273,7 @@
       listen<number>("ltc_expiring_soon", (event) => {
         const hours = event.payload;
         notifications.push(
-          `Contact file expires in ${hours} hour${hours === 1 ? "" : "s"}.`,
+          `Long-term code expires in ${hours} hour${hours === 1 ? "" : "s"}.`,
           "info",
         );
       }),
@@ -242,7 +281,7 @@
 
     // Listen to file_offered event
     unlistenPromises.push(
-      listen<FileOfferedPayload>("file_offered", (event) => {
+      listen<FileOfferedPayload>("file_offered", async (event) => {
         const payload = event.payload;
         messagesState.append({
           id: payload.offerId,
@@ -255,9 +294,41 @@
           fileDetails: {
             filename: payload.filename,
             sizeBytes: payload.sizeBytes,
+            autodownloadPath: payload.autodownload,
           },
         });
         messagesState.setFirstUnread(payload.contactId, payload.offerId);
+
+        const senderName =
+          contactsState.getById(payload.contactId)?.displayName ?? "Someone";
+        const onThisChat =
+          !document.hidden &&
+          $page.url.pathname === `/chat/${payload.contactId}`;
+        if (!onThisChat) {
+          void notifyMessage({
+            senderName,
+            body: `Sent a file: ${payload.filename}`,
+          });
+        }
+
+        if (payload.autodownload) {
+          try {
+            await acceptFileOffer(
+              payload.contactId,
+              payload.offerId,
+              payload.autodownload,
+            );
+          } catch (e) {
+            messagesState.setAutodownloadPath(
+              payload.offerId,
+              payload.contactId,
+              null,
+            );
+            const reason = e instanceof Error ? e.message : String(e);
+            notifications.push(`Auto-download failed: ${reason}`, "error");
+            console.error("Auto-accept file offer failed", e);
+          }
+        }
       }),
     );
 
@@ -265,7 +336,11 @@
     unlistenPromises.push(
       listen<FileTransferProgressPayload>("file_transfer_progress", (event) => {
         const { transferId, bytesTransferred, totalBytes } = event.payload;
-        messagesState.setTransferProgress(transferId, bytesTransferred, totalBytes);
+        messagesState.setTransferProgress(
+          transferId,
+          bytesTransferred,
+          totalBytes,
+        );
       }),
     );
 
@@ -288,7 +363,10 @@
 
         const contact = contactsState.getById(contactId);
         const contactName = contact?.displayName ?? "Contact";
-        notifications.push(`Received ${filename} from ${contactName}`, "success");
+        notifications.push(
+          `Received ${filename} from ${contactName}`,
+          "success",
+        );
       }),
     );
 
@@ -322,3 +400,4 @@
 
 {@render children()}
 <ToastContainer />
+<ConfirmDialog />

@@ -28,8 +28,8 @@ impl<T, E: std::fmt::Display> MapKursalResult<T> for std::result::Result<T, E> {
     }
 }
 
-impl Into<String> for KursalError {
-    fn into(self) -> String {
-        self.to_string()
+impl From<KursalError> for String {
+    fn from(val: KursalError) -> String {
+        val.to_string()
     }
 }

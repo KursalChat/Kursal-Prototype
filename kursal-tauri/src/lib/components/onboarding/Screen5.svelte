@@ -5,6 +5,7 @@
 
   import Winston from "./Winston.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
+  import AvatarPicker from "$lib/components/AvatarPicker.svelte";
   import { Upload, X } from "lucide-svelte";
   import { broadcastProfile } from "$lib/api/identity";
   import { profileState } from "$lib/state/profile.svelte";
@@ -59,52 +60,9 @@
     return text.split("").map((ch, i) => ({ ch, delay: i * step }));
   }
 
-  async function handleAvatarSelection(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
-    if (!file.type.startsWith("image/")) {
-      notifications.push("Not an image", "error");
-      return;
-    }
-    try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      const MAX_SIZE = 256;
-      let width = bitmap.width;
-      let height = bitmap.height;
-      if (width > height) {
-        if (width > MAX_SIZE) {
-          height *= MAX_SIZE / width;
-          width = MAX_SIZE;
-        }
-      } else {
-        if (height > MAX_SIZE) {
-          width *= MAX_SIZE / height;
-          height = MAX_SIZE;
-        }
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("No 2D context");
-      ctx.drawImage(bitmap, 0, 0, width, height);
-      const dataUrl = canvas.toDataURL("image/webp", 0.8);
-      if (dataUrl.length > 55000) {
-        notifications.push("Image too large, try a smaller one", "error");
-        return;
-      }
-      const base64Data = dataUrl.split(",")[1];
-      avatarBase64 = base64Data;
-      avatarBytes = Array.from(
-        Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0)),
-      );
-    } catch (e) {
-      console.error("Avatar compression failed", e);
-      notifications.push("Failed to process image", "error");
-    } finally {
-      input.value = "";
-    }
+  function handleAvatarChange(b64: string, bytes: number[]) {
+    avatarBase64 = b64;
+    avatarBytes = bytes;
   }
 
   function removeAvatar() {
@@ -192,33 +150,40 @@
     </div>
 
     <div class="form" class:show={showForm} aria-hidden={!showForm}>
-      <label class="avatar-slot" title="Upload a photo">
-        <Avatar name={displayName.trim() || "?"} src={avatarBase64} size={88} />
-        <div class="avatar-overlay" class:filled={!!avatarBase64}>
-          <Upload size={18} strokeWidth={2.2} />
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          onchange={handleAvatarSelection}
-          tabindex={showForm ? 0 : -1}
-        />
-        {#if avatarBase64}
-          <button
-            type="button"
-            class="avatar-remove"
-            aria-label="Remove photo"
-            tabindex={showForm ? 0 : -1}
-            onclick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              removeAvatar();
-            }}
-          >
-            <X size={12} strokeWidth={2.6} />
-          </button>
-        {/if}
-      </label>
+      <AvatarPicker onChange={handleAvatarChange}>
+        {#snippet children(open)}
+          <div class="avatar-slot-wrap">
+            <button
+              type="button"
+              class="avatar-slot"
+              title="Upload a photo"
+              aria-label="Upload a photo"
+              tabindex={showForm ? 0 : -1}
+              onclick={open}
+            >
+              <Avatar
+                name={displayName.trim() || "?"}
+                src={avatarBase64}
+                size={88}
+              />
+              <div class="avatar-overlay" class:filled={!!avatarBase64}>
+                <Upload size={18} strokeWidth={2.2} />
+              </div>
+            </button>
+            {#if avatarBase64}
+              <button
+                type="button"
+                class="avatar-remove"
+                aria-label="Remove photo"
+                tabindex={showForm ? 0 : -1}
+                onclick={removeAvatar}
+              >
+                <X size={12} strokeWidth={2.6} />
+              </button>
+            {/if}
+          </div>
+        {/snippet}
+      </AvatarPicker>
 
       <input
         bind:this={nameInput}
@@ -466,6 +431,11 @@
     pointer-events: auto;
   }
 
+  .avatar-slot-wrap {
+    position: relative;
+    width: 88px;
+    height: 88px;
+  }
   .avatar-slot {
     position: relative;
     width: 88px;
@@ -473,6 +443,9 @@
     border-radius: 50%;
     cursor: pointer;
     display: block;
+    padding: 0;
+    background: transparent;
+    border: none;
     box-shadow:
       0 0 0 1px rgba(123, 163, 247, 0.35),
       0 0 26px rgba(46, 91, 215, 0.3);
@@ -485,14 +458,6 @@
     box-shadow:
       0 0 0 1px rgba(123, 163, 247, 0.6),
       0 0 34px rgba(46, 91, 215, 0.5);
-  }
-  .avatar-slot input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
   }
 
   .avatar-overlay {

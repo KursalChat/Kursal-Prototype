@@ -7,8 +7,8 @@ use std::{net::SocketAddr, path::Path};
 pub struct RelayConfigFile {
     pub listen_addr: String,
     pub announce_addr: String,
-    pub max_connections: usize,
-    pub max_connections_per_ip: Option<usize>,
+    pub max_connections: u32,
+    pub max_connections_per_ip: Option<u32>,
     pub log_file: Option<String>,
     pub log_level: String,
     pub bootstrap_peers: Vec<String>,
@@ -18,8 +18,8 @@ pub struct RelayConfigFile {
 pub struct RelayConfig {
     pub listen_addr: SocketAddr,
     pub announce_addr: SocketAddr,
-    pub max_connections: usize,
-    pub max_connections_per_ip: usize,
+    pub max_connections: u32,
+    pub max_connections_per_ip: u32,
     pub log_file: Option<String>,
     pub log_level: String,
     pub bootstrap_peers: Vec<Multiaddr>,
@@ -40,7 +40,7 @@ impl RelayConfig {
                 KursalError::Storage(format!("Could not parse announce_addr: {err}"))
             })?,
             max_connections: content.max_connections,
-            max_connections_per_ip: content.max_connections_per_ip.unwrap_or(3usize),
+            max_connections_per_ip: content.max_connections_per_ip.unwrap_or(3u32),
             log_file: content.log_file,
             log_level: content.log_level,
             bootstrap_peers: content

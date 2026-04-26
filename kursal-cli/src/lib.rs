@@ -6,7 +6,6 @@ use std::path::PathBuf;
 pub mod config;
 pub mod health;
 pub mod identity;
-pub mod limiter;
 pub mod swarm;
 
 #[derive(Parser, Debug)]

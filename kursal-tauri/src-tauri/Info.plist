@@ -1,13 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-  macOS Info.plist fragment — merged with the Tauri-generated bundle Info.plist.
-  Tauri auto-detects a file named `Info.plist` next to tauri.conf.json.
-
-  These keys ensure the OS-level permission prompts show the correct messages
-  (Ventura+ will refuse to even show the prompt without these), and that mDNS
-  nearby discovery works through macOS Private Network Privacy (14.0+).
--->
 <plist version="1.0">
 <dict>
 	<!-- Nearby peer discovery (libp2p mDNS + local dev server) -->

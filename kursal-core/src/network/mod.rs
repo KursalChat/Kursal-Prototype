@@ -11,7 +11,10 @@ use crate::{
         rendezvous::lookup_rendezvous,
         swarm::{ConnectionKind, NetworkEvent, SwarmCommand, SwarmHandle},
     },
-    storage::{Database, SharedDatabase, relay_server_enabled},
+    storage::{
+        Database, SharedDatabase, get_relay_config, get_swarm_listening_port,
+        get_swarm_mdns_enabled,
+    },
 };
 use libp2p::PeerId;
 use std::{collections::HashMap, str::FromStr, sync::Arc};
@@ -19,10 +22,12 @@ use tokio::sync::{Mutex, mpsc, oneshot};
 
 pub const BOOTSTRAP_PEERS: &[&str] = &[
     "/dns4/diffie.kursal.chat/udp/4891/quic-v1/p2p/12D3KooW9sfuTYevisKu5JV9LWrMmaSYu8SnZnG8vEPPW7UFrXJX",
+    // "/dns4/hellman.kursal.chat/tcp/4891/p2p/12D3KooWMPjnbgcwEhTgAGvFqagmbnbbwyvqYa8sxJja4q5FPy1N",
 ];
 
 pub mod dht;
 pub mod kademlia;
+pub mod limiter;
 pub mod rendezvous;
 pub mod rotation;
 pub mod swarm;
@@ -46,8 +51,19 @@ impl NetworkManager {
         let (event_tx, event_rx) = mpsc::channel(64);
         let (bt_event_tx, bt_event_rx) = mpsc::channel(64);
         let identity = init_transport(db)?;
-        let primary =
-            SwarmHandle::spawn(identity, event_tx.clone(), relay_server_enabled(db)?).await?;
+
+        let port = get_swarm_listening_port(db);
+        let relay_config = get_relay_config(db)?;
+        let mdns_enabled = get_swarm_mdns_enabled(db)?;
+
+        let primary = SwarmHandle::spawn(
+            identity,
+            event_tx.clone(),
+            relay_config,
+            mdns_enabled,
+            port.unwrap_or(0u16),
+        )
+        .await?;
 
         let my_beacon = Arc::new(Mutex::new(None));
         let mdns_transport = MdnsTransport::new(primary.cmd_tx.clone(), my_beacon.clone());
@@ -122,11 +138,12 @@ pub async fn dispatch_events(
     db: SharedDatabase,
     network: Arc<Mutex<NetworkManager>>,
     app_event_tx: mpsc::Sender<AppEvent>,
+    cache_dir: &std::path::Path,
 ) {
     loop {
         tokio::select! {
             Some(event) = event_rx.recv() => {
-                handle_internal_network_event(event, &db, &network, &app_event_tx).await
+                handle_internal_network_event(event, &db, cache_dir, &network, &app_event_tx).await
             }
             Some(event) = bt_event_rx.recv() => {
                 handle_bt_event(event, &db, &network, &app_event_tx).await
@@ -218,6 +235,7 @@ async fn handle_bt_event(
 async fn handle_internal_network_event(
     event: NetworkEvent,
     db: &SharedDatabase,
+    cache_dir: &std::path::Path,
     network: &Arc<Mutex<NetworkManager>>,
     app_event_tx: &mpsc::Sender<AppEvent>,
 ) {
@@ -346,13 +364,26 @@ async fn handle_internal_network_event(
                     let cmd_tx = network.lock().await.primary.cmd_tx.clone();
                     let db_clone = db.clone();
                     let app_event_tx_clone = app_event_tx.clone();
+                    let cache_dir_clone = cache_dir.to_path_buf();
 
                     tokio::task::spawn_local(async move {
-                        if let Err(e) =
-                            handle_incoming(from, data, db_clone, &cmd_tx, &app_event_tx_clone)
-                                .await
+                        if let Err(e) = handle_incoming(
+                            from,
+                            data,
+                            db_clone,
+                            &cache_dir_clone,
+                            &cmd_tx,
+                            &app_event_tx_clone,
+                        )
+                        .await
                         {
                             log::warn!("handle_incoming error: {e}");
+                            let _ = app_event_tx_clone
+                                .send(AppEvent::BackendSignal {
+                                    signal: "handle_incoming_error".to_string(),
+                                    payload: e.to_string(),
+                                })
+                                .await;
                         }
                     });
                 }
@@ -400,7 +431,7 @@ async fn handle_internal_network_event(
         }
 
         NetworkEvent::ConnectionEstablished { peer_id, via } => {
-            log::info!("[network] connection establoished with {peer_id} via {via:?}");
+            log::info!("[network] connection established with {peer_id} via {via:?}");
             let peer_id_str = peer_id.to_base58();
 
             if let Ok(contacts) = Contact::load_all(&*db.0.lock().await)

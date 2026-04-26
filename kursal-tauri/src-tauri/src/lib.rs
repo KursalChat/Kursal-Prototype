@@ -1,24 +1,31 @@
+use crate::core_event::handle_core_event;
+use crate::deep_link::map_deep_links;
 use clap::{Parser, Subcommand};
 use kursal_cli::CLIArgs;
-use kursal_core::dto::{ContactResponse, MessageResponse};
-use kursal_core::storage::api_server_enabled;
+use kursal_core::apiserver::CoreEventEmitter;
+use kursal_core::storage::{api_server_config, api_server_password, should_reset_full_app};
 use kursal_core::{
-    api::{AppEvent, ConnectionStatus, CoreCommand, state::AppState},
+    api::{AppEvent, CoreCommand, state::AppState},
     identity::{
         self,
         keychain::{self, KeychainConfig},
     },
     network::{NetworkManager, dispatch_events},
 };
+use std::fs::remove_dir_all;
 use std::{collections::HashMap, sync::Arc};
-use tauri::{AppHandle, Emitter, Manager, async_runtime::block_on};
-use tokio::sync::{Mutex, mpsc, oneshot::Sender};
+use tauri::{Manager, async_runtime::block_on};
+use tauri_plugin_deep_link::DeepLinkExt;
+use tokio::sync::{Mutex, broadcast, mpsc};
 
 pub mod benchmark;
 pub mod commands;
+pub mod core_event;
+pub mod deep_link;
 pub mod dirs;
 pub mod error;
 pub mod file;
+pub mod window_menu;
 
 #[derive(Parser, Default)]
 #[command(version, about, long_about = None, author)]
@@ -43,8 +50,8 @@ enum Commands {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     match Args::try_parse() {
-        Ok(args) => match args.command {
-            Some(Commands::Cli(cli_args)) => {
+        Ok(args) => {
+            if let Some(Commands::Cli(cli_args)) = args.command {
                 block_on(kursal_cli::run(
                     cli_args.config,
                     cli_args.validate,
@@ -53,8 +60,7 @@ pub fn run() {
 
                 return;
             }
-            _ => {}
-        },
+        }
         Err(e) => match e.kind() {
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion => {
                 e.exit()
@@ -63,14 +69,35 @@ pub fn run() {
         },
     }
 
-    let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_clipboard_manager::init());
+    #[cfg(dev)]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(not(dev))]
+    let mut builder = tauri::Builder::default();
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    window.hide().unwrap();
+                }
+            });
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios", dev)))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_autostart::Builder::new().build())
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                let _ = app
+                    .get_webview_window("main")
+                    .expect("no main window")
+                    .set_focus();
+            }));
     }
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -79,9 +106,17 @@ pub fn run() {
     }
 
     builder
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            window_menu::setup(app).unwrap();
+
             dirs::init_dirs(app).unwrap();
             let log_path = dirs::logs_dir().unwrap().join("kursal.log");
 
@@ -145,6 +180,27 @@ pub fn run() {
             let (network, event_rx, bt_event_rx) =
                 block_on(NetworkManager::new(&db.0.blocking_lock())).unwrap();
 
+            // check for reset flags
+            let db_clone = db.clone();
+            let should_reset = block_on(async move {
+                let db_lock = db_clone.0.lock().await;
+                should_reset_full_app(&db_lock)
+            });
+            if should_reset {
+                if let Ok(cache_dir) = dirs::cache_dir() {
+                    let _ = remove_dir_all(cache_dir);
+                }
+                if let Ok(logs_dir) = dirs::logs_dir() {
+                    let _ = remove_dir_all(logs_dir);
+                }
+                if let Ok(app_data_dir) = dirs::app_data_dir() {
+                    let _ = remove_dir_all(app_data_dir);
+                }
+
+                app.handle().restart();
+            }
+
+
             let (core_cmd_tx, core_cmd_rx) = mpsc::channel::<CoreCommand>(32);
             let (app_event_tx, mut app_event_rx) = mpsc::channel::<AppEvent>(16);
             let network_arc = Arc::new(Mutex::new(network));
@@ -166,6 +222,7 @@ pub fn run() {
                 network_arc.clone(),
             ));
 
+            let cache_dir = dirs::cache_dir()?;
             std::thread::spawn(move || {
                 let local = tokio::task::LocalSet::new();
 
@@ -176,16 +233,21 @@ pub fn run() {
                     db_clone,
                     network_clone,
                     app_tx_clone,
+                    cache_dir,
                 )));
             });
 
             let handle = app.handle().clone();
+            let (api_server_tx, _): (broadcast::Sender<CoreEventEmitter>, _) = broadcast::channel(64);
 
+            let api_server_tx_clone = api_server_tx.clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = app_event_rx.recv().await {
-                    handle_core_event(event, &handle, &pending_nearby_clone).await;
+                    handle_core_event(event, &handle, &api_server_tx_clone, &pending_nearby_clone).await;
                 }
             });
+
+            let start_urls = app.deep_link().get_current()?.map(map_deep_links);
 
             app.manage(AppState {
                 db: db.clone(),
@@ -193,76 +255,67 @@ pub fn run() {
                 app_event_tx: app_event_tx.clone(),
                 core_cmd_tx: core_cmd_tx.clone(),
                 pending_nearby: pending_nearby.clone(),
+                db_path,
+                deep_links: Mutex::new(start_urls),
+                keychain_config
             });
 
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 let handle = app.handle().clone();
+                let db_clone = db.clone();
                 tauri::async_runtime::spawn(async move {
                     use std::time::Duration;
 
                     let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
 
                     loop {
+                        use kursal_core::storage::get_updater_enabled;
+
                         interval.tick().await;
-                        let _ = check_for_updates_impl(handle.clone(), false).await;
+
+                        let enabled = get_updater_enabled(&*db_clone.0.lock().await).unwrap_or(true);
+
+                        if enabled {
+                            let _ = check_for_updates_impl(handle.clone(), false).await;
+                        }
                     }
                 });
             }
 
-            #[cfg(any(target_os = "windows", target_os = "linux"))]
-            {
-                use crate::file::open_files;
-
-                let files: Vec<(String, String)> = std::env::args()
-                    .skip(1)
-                    .filter(|a| !a.starts_with('-'))
-                    .filter_map(|path| {
-                        let p = std::path::PathBuf::from(&path);
-                        let name = p.file_name()?.to_string_lossy().to_string();
-                        Some((path, name))
-                    })
-                    .collect();
-
-                if !files.is_empty() {
-                    open_files(&app.handle(), files);
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                if let Err(err) = deep_link::deep_link_handler(&handle, map_deep_links(event.urls())) {
+                    log::error!("Error while handling deep linking: {err}");
                 }
-            }
+            });
 
             // spawn local API server if enabled
-            // TODO: kursal_core::storage::set_api_server_enabled(&*db.0.lock().await, false).unwrap();
             let core_cmd_tx_clone = core_cmd_tx.clone();
             let db_clone = db.clone();
             let network_clone = network_arc.clone();
             let pending_nearby_clone = pending_nearby.clone();
             tauri::async_runtime::spawn(async move {
-                let is_api_server_enabled = api_server_enabled(&*db.0.lock().await);
+                log::info!("Starting API server...");
 
-                match is_api_server_enabled {
-                    Ok(true) => {
-                        log::info!("Starting API server...");
-
-                        // TODO: proper password!!!
-                        let auth_token = "root".to_string();
-
-                        if let Err(err) = kursal_core::apiserver::run_server(
-                            auth_token,
-                            core_cmd_tx_clone,
-                            db_clone,
-                            network_clone,
-                            pending_nearby_clone,
-                        )
-                        .await
-                        {
-                            log::error!("Error while running API server: {err}");
-                        }
+                if let Ok(api_config) = api_server_config(&*db.0.lock().await)
+                && api_config.enabled
+                && let Ok(api_token) = api_server_password(&*db.0.lock().await) {
+                    if let Err(err) = kursal_core::apiserver::run_server(
+                        api_token,
+                        api_config,
+                        core_cmd_tx_clone,
+                        db_clone,
+                        network_clone,
+                        pending_nearby_clone,
+                        api_server_tx,
+                    )
+                    .await
+                    {
+                        log::error!("Error while running API server: {err}");
                     }
-                    Ok(false) => {
-                        log::info!("API server not enabled");
-                    }
-                    Err(err) => {
-                        log::error!("Could not start API server: {err}");
-                    }
+                } else {
+                    log::info!("API server could not start because of an invalid auth_token setting. Please re-generate the token.");
                 }
             });
 
@@ -289,21 +342,51 @@ pub fn run() {
             commands::get_security_code,
             commands::confirm_security_code,
             commands::set_contact_blocked,
+            commands::list_blocked_contacts,
             commands::rotate_peer_id,
             commands::get_local_peer_id,
             commands::get_local_user_id_hex,
-            commands::set_relay_server_enabled,
             commands::get_local_user_profile,
             commands::broadcast_profile,
             commands::share_profile,
             commands::check_for_updates,
             commands::open_log_folder,
+            commands::open_files_folder,
             commands::delete_message_for_everyone,
             commands::edit_message,
             commands::add_reaction,
             commands::remove_reaction,
             commands::accept_file_offer,
             commands::send_file_offer,
+            //
+            commands::export_backup,
+            commands::import_backup,
+            commands::get_updater_enabled,
+            commands::set_updater_enabled,
+            commands::get_storage_usage,
+            commands::get_auto_download_config,
+            commands::set_auto_download_config,
+            commands::get_auto_accept_config,
+            commands::set_auto_accept_config,
+            commands::list_shared_files,
+            commands::revoke_shared_file,
+            commands::revoke_shared_files_bulk,
+            commands::get_nearby_share_enabled,
+            commands::set_nearby_share_enabled,
+            commands::get_relay_config,
+            commands::set_relay_config,
+            commands::get_listening_port,
+            commands::set_listening_port,
+            commands::get_local_api_config,
+            commands::set_local_api_config,
+            commands::generate_local_api_token,
+            commands::delete_all_local_data,
+            commands::clear_message_history,
+            commands::get_peer_rotation_interval,
+            commands::set_peer_rotation_interval,
+            commands::get_typing_indicators_enabled,
+            commands::set_typing_indicators_enabled,
+            commands::frontend_ready,
             //
             benchmark::run_otp_benchmark,
             benchmark::cancel_benchmark,
@@ -313,247 +396,37 @@ pub fn run() {
         .expect("error while building application")
         .run(|_app, _event| {
             #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Opened { urls } = _event {
-                use crate::file::open_files;
+            {
+                if let tauri::RunEvent::Reopen { .. } = _event
+                    && let Some(win) = _app.get_webview_window("main") {
+                        win.show().unwrap();
+                        win.set_focus().unwrap();
+                }
 
-                let files: Vec<(String, String)> = urls
-                    .iter()
-                    .filter_map(|url| url.to_file_path().ok())
-                    .filter_map(|p| {
-                        let name = p.file_name()?.to_string_lossy().to_string();
-                        let path = p.to_string_lossy().to_string();
-                        Some((path, name))
-                    })
-                    .collect();
+                if let tauri::RunEvent::Opened { urls } = _event {
+                    use crate::file::open_files;
 
-                if !files.is_empty() {
-                    open_files(_app, files);
+                    let files: Vec<(String, String)> = urls
+                        .iter()
+                        .filter_map(|url| url.to_file_path().ok())
+                        .filter_map(|p| {
+                            let name = p.file_name()?.to_string_lossy().to_string();
+                            let path = p.to_string_lossy().to_string();
+                            Some((path, name))
+                        })
+                        .collect();
+
+                    if !files.is_empty() {
+                        open_files(_app, files);
+                    }
                 }
             }
         });
 }
 
-async fn handle_core_event(
-    event: AppEvent,
-    handle: &AppHandle,
-    pending_nearby_clone: &Arc<Mutex<HashMap<String, Sender<bool>>>>,
-) {
-    match event {
-        AppEvent::MessageReceived { message, .. } => {
-            handle
-                .emit("message_received", MessageResponse::from(message))
-                .ok();
-        }
-
-        AppEvent::TypingIndicator { contact_id } => {
-            handle
-                .emit(
-                    "typing_indicator",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::MessageEdited {
-            contact_id,
-            message_id,
-            new_content,
-        } => {
-            handle
-                .emit(
-                    "message_edited",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "messageId": hex::encode(message_id.0),
-                        "newContent": new_content
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::MessageDeleted {
-            contact_id,
-            message_id,
-        } => {
-            handle
-                .emit(
-                    "message_deleted",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "messageId": hex::encode(message_id.0),
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::ReactionAdded {
-            contact_id,
-            message_id,
-            emoji,
-        } => {
-            handle
-                .emit(
-                    "reaction_added",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "messageId": hex::encode(message_id.0),
-                        "emoji": emoji,
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::ReactionRemoved {
-            contact_id,
-            message_id,
-            emoji,
-        } => {
-            handle
-                .emit(
-                    "reaction_removed",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "messageId": hex::encode(message_id.0),
-                        "emoji": emoji,
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::DeliveryConfirmed {
-            message_id,
-            contact_id,
-        } => {
-            handle
-                .emit(
-                    "delivery_confirmed",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "messageId": hex::encode(message_id.0)
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::ContactAdded { contact } => {
-            handle
-                .emit("contact_added", ContactResponse::from(contact))
-                .ok();
-        }
-
-        AppEvent::ContactUpdated { contact } => {
-            handle
-                .emit("contact_updated", ContactResponse::from(contact))
-                .ok();
-        }
-
-        AppEvent::PeerIdRotated { new_addresses } => {
-            handle.emit("peer_id_rotated", new_addresses).ok();
-        }
-
-        AppEvent::ConnectionChange { contact_id, status } => {
-            handle
-                .emit(
-                    "connection_changed",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "status": match status {
-                            ConnectionStatus::Connecting => "connecting",
-                            ConnectionStatus::Relay => "relay",
-                            ConnectionStatus::HolePunch => "holepunch",
-                            ConnectionStatus::Direct => "direct",
-                            ConnectionStatus::Disconnected => "disconnected",
-                        }
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::LTCExpiringSoon { hours_remaining } => {
-            handle.emit("ltc_expiring_soon", hours_remaining).ok();
-        }
-
-        AppEvent::NearbyRequest {
-            peer_id,
-            session_name,
-            decision_tx,
-        } => {
-            pending_nearby_clone
-                .lock()
-                .await
-                .insert(peer_id.clone(), decision_tx);
-            handle
-                .emit(
-                    "nearby_request",
-                    serde_json::json!({
-                        "peerId": peer_id,
-                        "sessionName": session_name
-                    }),
-                )
-                .ok();
-        }
-
-        AppEvent::ContactRemoved { contact_id } => {
-            handle
-                .emit("contact_removed", hex::encode(contact_id.0))
-                .ok();
-        }
-        AppEvent::FileOffered {
-            contact_id,
-            offer_id,
-            filename,
-            size_bytes,
-        } => {
-            handle
-                .emit(
-                    "file_offered",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "offerId": hex::encode(offer_id.0),
-                        "filename": filename,
-                        "sizeBytes": size_bytes
-                    }),
-                )
-                .ok();
-        }
-        AppEvent::FileTransferProgress {
-            transfer_id,
-            bytes_transferred,
-            total_bytes,
-        } => {
-            handle
-                .emit(
-                    "file_transfer_progress",
-                    serde_json::json!({
-                        "transferId": hex::encode(transfer_id.0),
-                        "bytesTransferred": bytes_transferred,
-                        "totalBytes": total_bytes
-                    }),
-                )
-                .ok();
-        }
-        AppEvent::FileReceived {
-            contact_id,
-            save_path,
-        } => {
-            handle
-                .emit(
-                    "file_received",
-                    serde_json::json!({
-                        "contactId": hex::encode(contact_id.0),
-                        "savePath": save_path,
-                    }),
-                )
-                .ok();
-        }
-    }
-}
-
 #[cfg(all(not(any(target_os = "android", target_os = "ios")), dev))]
 pub(crate) async fn check_for_updates_impl(
-    _app: AppHandle,
+    _app: tauri::AppHandle,
     _manual: bool,
 ) -> tauri_plugin_updater::Result<()> {
     Ok(()) // do not try to update on dev mode
@@ -561,7 +434,7 @@ pub(crate) async fn check_for_updates_impl(
 
 #[cfg(not(any(target_os = "android", target_os = "ios", dev)))]
 pub(crate) async fn check_for_updates_impl(
-    app: AppHandle,
+    app: tauri::AppHandle,
     manual: bool,
 ) -> tauri_plugin_updater::Result<()> {
     log::debug!("checking for updates... manual={manual}");

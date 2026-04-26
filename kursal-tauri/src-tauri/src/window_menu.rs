@@ -1,0 +1,110 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
+    use tauri::Manager;
+    use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
+
+    let root_menu = SubmenuBuilder::new(app, "Kursal").about(None).separator();
+
+    #[cfg(target_os = "macos")]
+    let root_menu = root_menu.services().separator();
+
+    let root_menu = root_menu
+        .item(
+            &MenuItem::with_id(
+                app,
+                "dev_tools",
+                "Developer tools",
+                true,
+                Some("CmdOrControl+Alt+I"),
+            )
+            .unwrap(),
+        )
+        .item(
+            &MenuItem::with_id(
+                app,
+                "settings",
+                "Open settings",
+                true,
+                Some("CmdOrControl+,"),
+            )
+            .unwrap(),
+        )
+        .item(&MenuItem::with_id(app, "reload", "Reload", true, Some("CmdOrControl+R")).unwrap())
+        .item(
+            &MenuItem::with_id(
+                app,
+                "restart",
+                "Restart",
+                true,
+                Some("CmdOrControl+Shift+R"),
+            )
+            .unwrap(),
+        )
+        .hide()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .fullscreen()
+        .close_window()
+        .build()?;
+
+    //
+
+    let menu = MenuBuilder::new(app)
+        .items(&[&root_menu, &edit_menu, &window_menu])
+        .build()?;
+    app.set_menu(menu)?;
+
+    app.on_menu_event(move |app_handle, event| match event.id().0.as_str() {
+        "dev_tools" => {
+            if let Some(window) = app_handle.get_webview_window("main")
+                && !window.is_devtools_open()
+            {
+                window.open_devtools();
+            }
+        }
+        "settings" => {
+            use kursal_core::api::{AppEvent, state::AppState};
+            use tauri::async_runtime::block_on;
+
+            let state = app_handle.state::<AppState>();
+            block_on(async move {
+                state
+                    .app_event_tx
+                    .send(AppEvent::BackendSignal {
+                        signal: "open_settings".to_string(),
+                        payload: String::with_capacity(0),
+                    })
+                    .await
+                    .ok();
+            });
+        }
+        "reload" => {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                window.reload().ok();
+            };
+        }
+        "restart" => {
+            app_handle.restart();
+        }
+        _ => {
+            log::debug!("Unexpected menu event: {:?}", event.id())
+        }
+    });
+
+    Ok(())
+}

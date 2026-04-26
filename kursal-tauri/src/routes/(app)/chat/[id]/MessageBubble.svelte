@@ -9,15 +9,43 @@
     Download,
     Check,
     CheckCheck,
+    CloudUpload,
+    FolderOpen,
   } from "lucide-svelte";
+  import { convertFileSrc } from "@tauri-apps/api/core";
+  import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+  import { exists } from "@tauri-apps/plugin-fs";
   import Spinner from "$lib/components/Spinner.svelte";
+  import { notifications } from "$lib/state/notifications.svelte";
   import type { MessageResponse } from "$lib/types";
   import {
     formatFileSize,
     formatTime,
     getMessagePreview,
+    mediaKindFromFilename,
     renderMarkdown,
   } from "./chat-utils";
+
+  async function openLocalFile(path: string) {
+    try {
+      await openPath(path);
+    } catch (e) {
+      notifications.push(
+        `Couldn't open file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
+    }
+  }
+  async function revealLocalFile(path: string) {
+    try {
+      await revealItemInDir(path);
+    } catch (e) {
+      notifications.push(
+        `Couldn't reveal file: ${e instanceof Error ? e.message : e}`,
+        "error",
+      );
+    }
+  }
 
   interface Reaction {
     emoji: string;
@@ -89,6 +117,26 @@
     onDeleteLocal,
     onToggleEmojiPicker,
   }: Props = $props();
+
+  let pathMissing = $state(false);
+  $effect(() => {
+    const path = msg.fileDetails?.autodownloadPath ?? null;
+    if (!path || transferInProgress) {
+      pathMissing = false;
+      return;
+    }
+    let cancelled = false;
+    exists(path)
+      .then((ok) => {
+        if (!cancelled) pathMissing = !ok;
+      })
+      .catch(() => {
+        if (!cancelled) pathMissing = true;
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
 </script>
 
 <div
@@ -120,6 +168,7 @@
     class:sent={msg.direction === "sent"}
     class:has-file={!!msg.fileDetails}
     class:failed={msg.status === "failed"}
+    class:queued={msg.status === "queued"}
     class:sending={msg.status === "sending"}
     style="transform: translateX({swipeDx}px);"
   >
@@ -142,7 +191,48 @@
 
     <div class="selectable msg-content">
       {#if msg.fileDetails}
-        <div class="file-bubble">
+        {@const autoPath =
+          msg.fileDetails.autodownloadPath &&
+          !transferInProgress &&
+          !pathMissing
+            ? msg.fileDetails.autodownloadPath
+            : null}
+        {@const mediaKind = autoPath
+          ? mediaKindFromFilename(msg.fileDetails.filename)
+          : "other"}
+        {@const mediaSrc = autoPath ? convertFileSrc(autoPath) : null}
+
+        {#if autoPath && mediaSrc && mediaKind === "image"}
+          <button
+            class="media-img-btn"
+            title="Open"
+            onclick={() => openLocalFile(autoPath)}
+          >
+            <img
+              class="media-img"
+              src={mediaSrc}
+              alt={msg.fileDetails.filename}
+              loading="lazy"
+            />
+          </button>
+        {:else if autoPath && mediaSrc && mediaKind === "video"}
+          <!-- svelte-ignore a11y_media_has_caption -->
+          <video
+            class="media-video"
+            src={mediaSrc}
+            controls
+            preload="metadata"
+          ></video>
+        {:else if autoPath && mediaSrc && mediaKind === "audio"}
+          <audio
+            class="media-audio"
+            src={mediaSrc}
+            controls
+            preload="metadata"
+          ></audio>
+        {/if}
+
+        <div class="file-bubble" class:embedded={!!autoPath && mediaKind !== "other"}>
           <div class="file-icon"><FileText size={22} /></div>
           <div class="file-info">
             <span class="file-name">{msg.fileDetails.filename}</span>
@@ -163,7 +253,16 @@
             {/if}
           </div>
           {#if msg.direction === "received"}
-            {#if fileOfferState === "accepted" && transferDone}
+            {#if autoPath}
+              <button
+                class="file-dl-btn"
+                title="Show in folder"
+                aria-label="Show in folder"
+                onclick={() => revealLocalFile(autoPath)}
+              >
+                <FolderOpen size={16} />
+              </button>
+            {:else if fileOfferState === "accepted" && transferDone}
               <span class="file-done" title="Complete">
                 <Check size={18} />
               </span>
@@ -200,6 +299,12 @@
           <span class="msg-status-dot">
             <Spinner size={10} color="currentColor" />
           </span>
+        {:else if msg.status === "queued"}
+          <span class="msg-status-dot queued" title="Queued — will send when online">
+            <CloudUpload size={12} />
+          </span>
+          <button class="retry-btn" onclick={onResend} title="Send now">Send</button>
+          <button class="retry-btn danger" onclick={onDeleteLocal} title="Discard">×</button>
         {:else if msg.status === "failed"}
           <span class="msg-status failed">failed</span>
           <button class="retry-btn" onclick={onResend}>Retry</button>
@@ -230,7 +335,7 @@
     </div>
   {/if}
 
-  {#if !isCoarsePointer && (hovered || emojiOpen) && msg.status !== "sending" && msg.status !== "failed"}
+  {#if !isCoarsePointer && (hovered || emojiOpen) && msg.status !== "sending" && msg.status !== "failed" && msg.status !== "queued"}
     <div class="msg-actions" class:sent={msg.direction === "sent"}>
       <button
         class="act-btn"
@@ -306,9 +411,9 @@
   .bubble {
     --r-big: 18px;
     --r-sm: 6px;
-    background: var(--bg-tertiary);
+    background: var(--bg-secondary);
     color: var(--text-primary);
-    border: 1px solid var(--border-light);
+    border: 1px solid var(--border);
     padding: 8px 13px;
     font-size: 14.5px;
     line-height: 1.5;
@@ -369,6 +474,16 @@
       rgba(185, 28, 28, 0.5)
     );
     border-color: rgba(248, 113, 113, 0.4);
+    color: #fff;
+  }
+  .bubble.queued {
+    background: linear-gradient(
+      135deg,
+      rgba(99, 102, 241, 0.55),
+      rgba(129, 140, 248, 0.55)
+    );
+    border-style: dashed;
+    border-color: rgba(165, 180, 252, 0.55);
     color: #fff;
   }
   .bubble.has-file {
@@ -558,6 +673,9 @@
   .msg-status-dot.delivered {
     color: rgba(255, 255, 255, 0.9);
   }
+  .msg-status-dot.queued {
+    color: rgba(255, 255, 255, 0.95);
+  }
   .retry-btn {
     font-size: 10.5px;
     font-weight: 700;
@@ -626,6 +744,40 @@
     color: var(--accent-hover);
   }
 
+  .media-img-btn {
+    display: block;
+    padding: 0;
+    background: none;
+    border: 0;
+    cursor: zoom-in;
+    border-radius: 12px;
+    overflow: hidden;
+    line-height: 0;
+    max-width: 100%;
+  }
+  .media-img {
+    display: block;
+    max-width: 320px;
+    max-height: 320px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 12px;
+  }
+  .media-video {
+    display: block;
+    max-width: 320px;
+    max-height: 360px;
+    width: 100%;
+    border-radius: 12px;
+    background: #000;
+  }
+  .media-audio {
+    display: block;
+    width: 280px;
+    max-width: 100%;
+  }
+
   .file-bubble {
     display: flex;
     align-items: center;
@@ -633,6 +785,15 @@
     padding: 6px 4px;
     min-width: 220px;
     max-width: 320px;
+  }
+  .file-bubble.embedded {
+    margin-top: 6px;
+    min-width: 0;
+    padding: 4px 2px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .bubble:not(.sent) .file-bubble.embedded {
+    border-top-color: var(--border-light);
   }
   .file-icon {
     width: 40px;

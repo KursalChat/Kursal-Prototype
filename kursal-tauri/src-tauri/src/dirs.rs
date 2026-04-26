@@ -2,9 +2,9 @@ use kursal_core::{KursalError, Result};
 use std::{path::PathBuf, sync::OnceLock};
 use tauri::Manager;
 
-static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
-static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
-static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub static APP_DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub static CACHE_DIR: OnceLock<PathBuf> = OnceLock::new();
+pub static LOGS_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn init_dirs(app: &tauri::App) -> Result<()> {
     let path = app.path();

@@ -11,11 +11,11 @@
 
 <style>
   .error-container {
-    height: 100vh;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-primary);
+    background: transparent;
   }
 
   .error-content {

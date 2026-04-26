@@ -4,18 +4,24 @@
   --bg-tertiary: #1e293b;
   --bg-hover: rgba(51, 65, 85, 0.5);
   --bg-input: #0f172a;
+  /* --panel: translucent panel tint that lets body gradient bleed through.
+   * Used for sidebar, settings/add-contact headers + sidenav. Modals keep
+   * --bg-secondary (opaque) so their content stays readable on any backdrop. */
+  --panel: rgba(17, 24, 39, 0.32);
+  --panel-border: rgba(148, 163, 184, 0.10);
   --surface: rgba(17, 24, 39, 0.92);
   --surface-soft: rgba(30, 41, 59, 0.55);
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
   --accent-solid: #4f46e5;
   --accent-dim: rgba(129, 140, 248, 0.15);
   --accent-selected: rgba(99, 102, 241, 0.55);
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  --danger: #f87171;
-  --danger-dim: rgba(248, 113, 113, 0.12);
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --danger-dim: rgba(239, 68, 68, 0.12);
   --warning: #fbbf24;
   --success: #34d399;
   --border: rgba(148, 163, 184, 0.12);
@@ -29,22 +35,508 @@
   --transition: 150ms ease;
 }
 
+:root[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-hover: rgba(148, 163, 184, 0.15);
+  --bg-input: #ffffff;
+  --panel: rgba(255, 255, 255, 0.45);
+  --panel-border: rgba(15, 23, 42, 0.08);
+  --surface: rgba(255, 255, 255, 0.96);
+  --surface-soft: rgba(241, 245, 249, 0.7);
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-solid: #4f46e5;
+  --accent-dim: rgba(79, 70, 229, 0.12);
+  --accent-selected: rgba(79, 70, 229, 0.85);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-dim: rgba(220, 38, 38, 0.08);
+  --warning: #d97706;
+  --success: #059669;
+  --border: rgba(15, 23, 42, 0.12);
+  --border-light: rgba(15, 23, 42, 0.06);
+  --glow: 0 8px 32px rgba(15, 23, 42, 0.08);
+}
+
+/* ---------- Palette presets ----------
+ * Each palette overrides the surface + accent families. Light variants
+ * use a soft tinted gradient over white; dark variants use a rich
+ * radial-over-linear gradient so the main content area feels alive.
+ * [data-palette][data-theme="light"] beats [data-theme="light"] alone,
+ * so these win over the defaults above. Classic = no override.
+ */
+
+/* Ocean */
+:root[data-palette="ocean"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 70% -10%, rgba(56, 189, 248, 0.16), transparent 60%),
+    linear-gradient(180deg, #0a1a2e 0%, #050a18 100%);
+  --bg-secondary: #081428;
+  --bg-tertiary: #0f2645;
+  --bg-hover: rgba(56, 189, 248, 0.09);
+  --bg-input: #0a1a33;
+  --panel: rgba(8, 20, 40, 0.32);
+  --panel-border: rgba(125, 211, 252, 0.10);
+  --surface: rgba(8, 20, 40, 0.92);
+  --surface-soft: rgba(15, 38, 69, 0.55);
+  --accent: #0ea5e9;
+  --accent-hover: #38bdf8;
+  --accent-solid: #0284c7;
+  --accent-dim: rgba(56, 189, 248, 0.15);
+  --accent-selected: rgba(14, 165, 233, 0.55);
+  --border: rgba(125, 211, 252, 0.14);
+  --border-light: rgba(125, 211, 252, 0.07);
+}
+:root[data-palette="ocean"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 70% -10%, rgba(14, 165, 233, 0.20), transparent 60%),
+    linear-gradient(160deg, #eff6ff 0%, #dbeafe 60%, #bae6fd 100%);
+  --bg-secondary: #f0f9ff;
+  --bg-tertiary: #e0f2fe;
+  --bg-hover: rgba(14, 165, 233, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(240, 249, 255, 0.45);
+  --panel-border: rgba(2, 132, 199, 0.18);
+  --surface: rgba(240, 249, 255, 0.92);
+  --surface-soft: rgba(224, 242, 254, 0.7);
+  --accent: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-solid: #0284c7;
+  --accent-dim: rgba(2, 132, 199, 0.14);
+  --accent-selected: rgba(2, 132, 199, 0.85);
+  --border: rgba(2, 132, 199, 0.22);
+  --border-light: rgba(2, 132, 199, 0.1);
+}
+
+/* Forest */
+:root[data-palette="forest"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(52, 211, 153, 0.14), transparent 60%),
+    linear-gradient(180deg, #08170f 0%, #030a06 100%);
+  --bg-secondary: #06130c;
+  --bg-tertiary: #0c2317;
+  --bg-hover: rgba(52, 211, 153, 0.09);
+  --bg-input: #09190f;
+  --panel: rgba(6, 19, 12, 0.32);
+  --panel-border: rgba(110, 231, 183, 0.10);
+  --surface: rgba(6, 19, 12, 0.92);
+  --surface-soft: rgba(12, 35, 23, 0.55);
+  --accent: #10b981;
+  --accent-hover: #34d399;
+  --accent-solid: #059669;
+  --accent-dim: rgba(52, 211, 153, 0.15);
+  --accent-selected: rgba(16, 185, 129, 0.55);
+  --border: rgba(110, 231, 183, 0.14);
+  --border-light: rgba(110, 231, 183, 0.07);
+}
+:root[data-palette="forest"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(16, 185, 129, 0.18), transparent 60%),
+    linear-gradient(160deg, #ecfdf5 0%, #d1fae5 60%, #a7f3d0 100%);
+  --bg-secondary: #f0fdf4;
+  --bg-tertiary: #dcfce7;
+  --bg-hover: rgba(5, 150, 105, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(240, 253, 244, 0.45);
+  --panel-border: rgba(5, 150, 105, 0.18);
+  --surface: rgba(240, 253, 244, 0.92);
+  --surface-soft: rgba(220, 252, 231, 0.7);
+  --accent: #059669;
+  --accent-hover: #047857;
+  --accent-solid: #059669;
+  --accent-dim: rgba(5, 150, 105, 0.14);
+  --accent-selected: rgba(5, 150, 105, 0.85);
+  --border: rgba(5, 150, 105, 0.22);
+  --border-light: rgba(5, 150, 105, 0.1);
+}
+
+/* Sunset */
+:root[data-palette="sunset"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 90% 110%, rgba(251, 146, 60, 0.16), transparent 60%),
+    radial-gradient(900px 700px at 50% -10%, rgba(251, 113, 133, 0.10), transparent 55%),
+    linear-gradient(180deg, #1c0a08 0%, #080302 100%);
+  --bg-secondary: #140807;
+  --bg-tertiary: #29140f;
+  --bg-hover: rgba(251, 146, 60, 0.10);
+  --bg-input: #190a08;
+  --panel: rgba(20, 8, 7, 0.32);
+  --panel-border: rgba(253, 186, 116, 0.10);
+  --surface: rgba(20, 8, 7, 0.92);
+  --surface-soft: rgba(41, 20, 15, 0.55);
+  --accent: #f97316;
+  --accent-hover: #fb923c;
+  --accent-solid: #ea580c;
+  --accent-dim: rgba(251, 146, 60, 0.15);
+  --accent-selected: rgba(249, 115, 22, 0.55);
+  --border: rgba(253, 186, 116, 0.14);
+  --border-light: rgba(253, 186, 116, 0.07);
+}
+:root[data-palette="sunset"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 90% 110%, rgba(249, 115, 22, 0.20), transparent 60%),
+    radial-gradient(900px 700px at 50% -10%, rgba(244, 63, 94, 0.12), transparent 55%),
+    linear-gradient(160deg, #fff7ed 0%, #ffedd5 60%, #fed7aa 100%);
+  --bg-secondary: #fff7ed;
+  --bg-tertiary: #ffedd5;
+  --bg-hover: rgba(234, 88, 12, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(255, 247, 237, 0.45);
+  --panel-border: rgba(234, 88, 12, 0.18);
+  --surface: rgba(255, 247, 237, 0.92);
+  --surface-soft: rgba(255, 237, 213, 0.7);
+  --accent: #ea580c;
+  --accent-hover: #c2410c;
+  --accent-solid: #ea580c;
+  --accent-dim: rgba(234, 88, 12, 0.14);
+  --accent-selected: rgba(234, 88, 12, 0.85);
+  --border: rgba(234, 88, 12, 0.22);
+  --border-light: rgba(234, 88, 12, 0.1);
+}
+
+/* Rose */
+:root[data-palette="rose"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 75% 110%, rgba(251, 113, 133, 0.14), transparent 60%),
+    linear-gradient(180deg, #1a080f 0%, #080305 100%);
+  --bg-secondary: #120609;
+  --bg-tertiary: #220d14;
+  --bg-hover: rgba(251, 113, 133, 0.10);
+  --bg-input: #16080b;
+  --panel: rgba(18, 6, 9, 0.32);
+  --panel-border: rgba(253, 164, 175, 0.10);
+  --surface: rgba(18, 6, 9, 0.92);
+  --surface-soft: rgba(34, 13, 20, 0.55);
+  --accent: #f43f5e;
+  --accent-hover: #fb7185;
+  --accent-solid: #e11d48;
+  --accent-dim: rgba(251, 113, 133, 0.15);
+  --accent-selected: rgba(244, 63, 94, 0.55);
+  --border: rgba(253, 164, 175, 0.14);
+  --border-light: rgba(253, 164, 175, 0.07);
+}
+:root[data-palette="rose"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 75% 110%, rgba(244, 63, 94, 0.18), transparent 60%),
+    linear-gradient(160deg, #fff1f2 0%, #ffe4e6 60%, #fecdd3 100%);
+  --bg-secondary: #fff1f2;
+  --bg-tertiary: #ffe4e6;
+  --bg-hover: rgba(225, 29, 72, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(255, 241, 242, 0.45);
+  --panel-border: rgba(225, 29, 72, 0.18);
+  --surface: rgba(255, 241, 242, 0.92);
+  --surface-soft: rgba(255, 228, 230, 0.7);
+  --accent: #e11d48;
+  --accent-hover: #be123c;
+  --accent-solid: #e11d48;
+  --accent-dim: rgba(225, 29, 72, 0.14);
+  --accent-selected: rgba(225, 29, 72, 0.85);
+  --border: rgba(225, 29, 72, 0.22);
+  --border-light: rgba(225, 29, 72, 0.1);
+}
+
+/* Violet */
+:root[data-palette="violet"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 65% -10%, rgba(192, 132, 252, 0.15), transparent 60%),
+    linear-gradient(180deg, #110a20 0%, #060310 100%);
+  --bg-secondary: #0d0818;
+  --bg-tertiary: #1a102d;
+  --bg-hover: rgba(192, 132, 252, 0.10);
+  --bg-input: #110a1f;
+  --panel: rgba(13, 8, 24, 0.32);
+  --panel-border: rgba(216, 180, 254, 0.10);
+  --surface: rgba(13, 8, 24, 0.92);
+  --surface-soft: rgba(26, 16, 45, 0.55);
+  --accent: #a855f7;
+  --accent-hover: #c084fc;
+  --accent-solid: #9333ea;
+  --accent-dim: rgba(192, 132, 252, 0.15);
+  --accent-selected: rgba(168, 85, 247, 0.55);
+  --border: rgba(216, 180, 254, 0.14);
+  --border-light: rgba(216, 180, 254, 0.07);
+}
+:root[data-palette="violet"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 65% -10%, rgba(168, 85, 247, 0.20), transparent 60%),
+    linear-gradient(160deg, #f5f3ff 0%, #ede9fe 60%, #ddd6fe 100%);
+  --bg-secondary: #f5f3ff;
+  --bg-tertiary: #ede9fe;
+  --bg-hover: rgba(147, 51, 234, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(245, 243, 255, 0.45);
+  --panel-border: rgba(147, 51, 234, 0.18);
+  --surface: rgba(245, 243, 255, 0.92);
+  --surface-soft: rgba(237, 233, 254, 0.7);
+  --accent: #9333ea;
+  --accent-hover: #7e22ce;
+  --accent-solid: #9333ea;
+  --accent-dim: rgba(147, 51, 234, 0.14);
+  --accent-selected: rgba(147, 51, 234, 0.85);
+  --border: rgba(147, 51, 234, 0.22);
+  --border-light: rgba(147, 51, 234, 0.1);
+}
+
+/* Midnight */
+:root[data-palette="midnight"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 85% -10%, rgba(129, 140, 248, 0.14), transparent 60%),
+    radial-gradient(1000px 800px at 45% 110%, rgba(99, 102, 241, 0.10), transparent 60%),
+    linear-gradient(180deg, #090d1d 0%, #02040c 100%);
+  --bg-secondary: #070a17;
+  --bg-tertiary: #0e1429;
+  --bg-hover: rgba(129, 140, 248, 0.10);
+  --bg-input: #090d1b;
+  --panel: rgba(7, 10, 23, 0.32);
+  --panel-border: rgba(165, 180, 252, 0.10);
+  --surface: rgba(7, 10, 23, 0.92);
+  --surface-soft: rgba(14, 20, 41, 0.55);
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-solid: #4f46e5;
+  --accent-dim: rgba(165, 180, 252, 0.14);
+  --accent-selected: rgba(99, 102, 241, 0.55);
+  --border: rgba(165, 180, 252, 0.14);
+  --border-light: rgba(165, 180, 252, 0.07);
+}
+:root[data-palette="midnight"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 85% -10%, rgba(99, 102, 241, 0.20), transparent 60%),
+    radial-gradient(1000px 800px at 45% 110%, rgba(79, 70, 229, 0.10), transparent 60%),
+    linear-gradient(160deg, #eef2ff 0%, #e0e7ff 60%, #c7d2fe 100%);
+  --bg-secondary: #eef2ff;
+  --bg-tertiary: #e0e7ff;
+  --bg-hover: rgba(79, 70, 229, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(238, 242, 255, 0.45);
+  --panel-border: rgba(79, 70, 229, 0.18);
+  --surface: rgba(238, 242, 255, 0.92);
+  --surface-soft: rgba(224, 231, 255, 0.7);
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-solid: #4f46e5;
+  --accent-dim: rgba(79, 70, 229, 0.14);
+  --accent-selected: rgba(79, 70, 229, 0.85);
+  --border: rgba(79, 70, 229, 0.22);
+  --border-light: rgba(79, 70, 229, 0.1);
+}
+
+/* Slate */
+:root[data-palette="slate"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(148, 163, 184, 0.10), transparent 60%),
+    linear-gradient(180deg, #0f172a 0%, #020617 100%);
+  --bg-secondary: #0b1220;
+  --bg-tertiary: #1e293b;
+  --bg-hover: rgba(148, 163, 184, 0.10);
+  --bg-input: #0c1424;
+  --panel: rgba(11, 18, 32, 0.32);
+  --panel-border: rgba(203, 213, 225, 0.10);
+  --surface: rgba(11, 18, 32, 0.92);
+  --surface-soft: rgba(30, 41, 59, 0.55);
+  --accent: #94a3b8;
+  --accent-hover: #cbd5e1;
+  --accent-solid: #64748b;
+  --accent-dim: rgba(148, 163, 184, 0.14);
+  --accent-selected: rgba(100, 116, 139, 0.55);
+  --border: rgba(203, 213, 225, 0.12);
+  --border-light: rgba(203, 213, 225, 0.06);
+}
+:root[data-palette="slate"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(100, 116, 139, 0.14), transparent 60%),
+    linear-gradient(160deg, #f8fafc 0%, #e2e8f0 60%, #cbd5e1 100%);
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-hover: rgba(71, 85, 105, 0.10);
+  --bg-input: #ffffff;
+  --panel: rgba(248, 250, 252, 0.45);
+  --panel-border: rgba(71, 85, 105, 0.16);
+  --surface: rgba(248, 250, 252, 0.92);
+  --surface-soft: rgba(241, 245, 249, 0.7);
+  --accent: #475569;
+  --accent-hover: #334155;
+  --accent-solid: #475569;
+  --accent-dim: rgba(71, 85, 105, 0.12);
+  --accent-selected: rgba(71, 85, 105, 0.85);
+  --border: rgba(71, 85, 105, 0.20);
+  --border-light: rgba(71, 85, 105, 0.10);
+}
+
+/* Mocha */
+:root[data-palette="mocha"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 75% -10%, rgba(217, 119, 6, 0.14), transparent 60%),
+    linear-gradient(180deg, #1a0f08 0%, #0a0604 100%);
+  --bg-secondary: #150b06;
+  --bg-tertiary: #2a180e;
+  --bg-hover: rgba(217, 119, 6, 0.10);
+  --bg-input: #170c08;
+  --panel: rgba(21, 11, 6, 0.32);
+  --panel-border: rgba(252, 211, 77, 0.10);
+  --surface: rgba(21, 11, 6, 0.92);
+  --surface-soft: rgba(42, 24, 14, 0.55);
+  --accent: #d97706;
+  --accent-hover: #f59e0b;
+  --accent-solid: #b45309;
+  --accent-dim: rgba(217, 119, 6, 0.15);
+  --accent-selected: rgba(217, 119, 6, 0.55);
+  --border: rgba(252, 211, 77, 0.14);
+  --border-light: rgba(252, 211, 77, 0.07);
+}
+:root[data-palette="mocha"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 75% -10%, rgba(180, 83, 9, 0.16), transparent 60%),
+    linear-gradient(160deg, #fffaf0 0%, #fef3c7 60%, #fde68a 100%);
+  --bg-secondary: #fef9ec;
+  --bg-tertiary: #fef3c7;
+  --bg-hover: rgba(180, 83, 9, 0.10);
+  --bg-input: #ffffff;
+  --panel: rgba(254, 249, 236, 0.45);
+  --panel-border: rgba(180, 83, 9, 0.18);
+  --surface: rgba(254, 249, 236, 0.92);
+  --surface-soft: rgba(254, 243, 199, 0.7);
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-solid: #b45309;
+  --accent-dim: rgba(180, 83, 9, 0.12);
+  --accent-selected: rgba(180, 83, 9, 0.85);
+  --border: rgba(180, 83, 9, 0.20);
+  --border-light: rgba(180, 83, 9, 0.10);
+}
+
+/* Amber */
+:root[data-palette="amber"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 65% -10%, rgba(234, 179, 8, 0.14), transparent 60%),
+    linear-gradient(180deg, #1a1605 0%, #060501 100%);
+  --bg-secondary: #15110a;
+  --bg-tertiary: #2a2110;
+  --bg-hover: rgba(234, 179, 8, 0.10);
+  --bg-input: #16120a;
+  --panel: rgba(21, 17, 10, 0.32);
+  --panel-border: rgba(253, 224, 71, 0.10);
+  --surface: rgba(21, 17, 10, 0.92);
+  --surface-soft: rgba(42, 33, 16, 0.55);
+  --accent: #eab308;
+  --accent-hover: #facc15;
+  --accent-solid: #ca8a04;
+  --accent-dim: rgba(234, 179, 8, 0.15);
+  --accent-selected: rgba(234, 179, 8, 0.55);
+  --border: rgba(253, 224, 71, 0.14);
+  --border-light: rgba(253, 224, 71, 0.07);
+}
+:root[data-palette="amber"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 65% -10%, rgba(202, 138, 4, 0.18), transparent 60%),
+    linear-gradient(160deg, #fefce8 0%, #fef9c3 60%, #fde047 100%);
+  --bg-secondary: #fefce8;
+  --bg-tertiary: #fef9c3;
+  --bg-hover: rgba(161, 98, 7, 0.10);
+  --bg-input: #ffffff;
+  --panel: rgba(254, 252, 232, 0.45);
+  --panel-border: rgba(161, 98, 7, 0.18);
+  --surface: rgba(254, 252, 232, 0.92);
+  --surface-soft: rgba(254, 249, 195, 0.7);
+  --accent: #a16207;
+  --accent-hover: #854d0e;
+  --accent-solid: #a16207;
+  --accent-dim: rgba(161, 98, 7, 0.12);
+  --accent-selected: rgba(161, 98, 7, 0.85);
+  --border: rgba(161, 98, 7, 0.20);
+  --border-light: rgba(161, 98, 7, 0.10);
+}
+
+/* Mint */
+:root[data-palette="mint"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(20, 184, 166, 0.14), transparent 60%),
+    linear-gradient(180deg, #062925 0%, #021412 100%);
+  --bg-secondary: #052420;
+  --bg-tertiary: #0a4640;
+  --bg-hover: rgba(20, 184, 166, 0.09);
+  --bg-input: #062925;
+  --panel: rgba(5, 36, 32, 0.32);
+  --panel-border: rgba(94, 234, 212, 0.10);
+  --surface: rgba(5, 36, 32, 0.92);
+  --surface-soft: rgba(10, 70, 64, 0.55);
+  --accent: #14b8a6;
+  --accent-hover: #2dd4bf;
+  --accent-solid: #0d9488;
+  --accent-dim: rgba(45, 212, 191, 0.15);
+  --accent-selected: rgba(20, 184, 166, 0.55);
+  --border: rgba(94, 234, 212, 0.14);
+  --border-light: rgba(94, 234, 212, 0.07);
+}
+:root[data-palette="mint"][data-theme="light"] {
+  --bg-primary:
+    radial-gradient(1400px 1000px at 80% -10%, rgba(13, 148, 136, 0.18), transparent 60%),
+    linear-gradient(160deg, #f0fdfa 0%, #ccfbf1 60%, #99f6e4 100%);
+  --bg-secondary: #f0fdfa;
+  --bg-tertiary: #ccfbf1;
+  --bg-hover: rgba(13, 148, 136, 0.12);
+  --bg-input: #ffffff;
+  --panel: rgba(240, 253, 250, 0.45);
+  --panel-border: rgba(13, 148, 136, 0.18);
+  --surface: rgba(240, 253, 250, 0.92);
+  --surface-soft: rgba(204, 251, 241, 0.7);
+  --accent: #0d9488;
+  --accent-hover: #0f766e;
+  --accent-solid: #0d9488;
+  --accent-dim: rgba(13, 148, 136, 0.14);
+  --accent-selected: rgba(13, 148, 136, 0.85);
+  --border: rgba(13, 148, 136, 0.22);
+  --border-light: rgba(13, 148, 136, 0.10);
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body {
-  height: 100%;
+html {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+/* `zoom` on <body> scales all descendants. Compensating width/height
+ * divides out the zoom factor so the final rendered body still fills
+ * the whole viewport — no gap when shrunk, no clipping when enlarged.
+ *
+ * The palette gradient lives on body so its highlights are anchored to
+ * the viewport, not to whichever inner panel happens to use --bg-primary.
+ * That way swapping between chat and settings doesn't shift where the
+ * radial sits visually. */
+body {
+  width: calc(100vw / var(--zoom, 1));
+  height: calc(100dvh / var(--zoom, 1));
+  zoom: var(--zoom, 1);
   overflow: hidden;
   overscroll-behavior: none;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
 }
 
-.selectable { user-select: text; }
+.selectable,
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
 
 input, textarea, button { font-family: inherit; font-size: inherit; }
 
@@ -71,4 +563,18 @@ a { color: inherit; text-decoration: none; }
   position: relative;
   z-index: 1;
   height: 100%;
+}
+
+.sec-head { margin: 0 0 4px; padding: 0 4px; }
+.sec-head h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.sec-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }

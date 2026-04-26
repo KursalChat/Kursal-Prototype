@@ -3,7 +3,7 @@ members = ["kursal-cli", "kursal-core", "kursal-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.12"
+version = "0.0.1-alpha.14"
 authors = ["Kodeur_Kubik <kubik@kursal.chat>", "Arlo <arlo@kursal.chat>"]
 edition = "2024"
 license = "AGPL-3.0-only"
@@ -59,12 +59,12 @@ ble-peripheral-rust = "0.2.0"
 redb = "4"
 toml = "1"
 log4rs = { version = "1", features = ["gzip"] }
-keyring-core = "0.7"
-android-native-keyring-store = { git = "https://github.com/open-source-cooperative/android-native-keyring-store.git", branch = "next" }
-apple-native-keyring-store = { git = "https://github.com/open-source-cooperative/apple-native-keyring-store.git", branch = "next" }
-windows-native-keyring-store = { git = "https://github.com/open-source-cooperative/windows-native-keyring-store.git", branch = "next" }
-linux-keyutils-keyring-store = { git = "https://github.com/open-source-cooperative/linux-keyutils-keyring-store.git", branch = "next" }
-dbus-secret-service-keyring-store = { git = "https://github.com/open-source-cooperative/dbus-secret-service-keyring-store.git", branch = "next" }
+keyring-core = "1"
+android-native-keyring-store = "1"
+apple-native-keyring-store = "1"
+windows-native-keyring-store = "1"
+linux-keyutils-keyring-store = "1"
+dbus-secret-service-keyring-store = "1"
 
 # API
 axum = "0.8"

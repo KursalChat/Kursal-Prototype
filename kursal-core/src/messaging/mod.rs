@@ -76,15 +76,14 @@ impl StoredMessage {
     ) -> Result<Vec<Self>> {
         let prefix = hex::encode(contact_id.0);
         let start = format!("{}:", prefix);
-        let end = match before {
-            Some(id) => format!("{}:{}", prefix, hex::encode(id.0)),
-            None => format!("{}:~", prefix),
-        };
+        let end = before
+            .map(|id| format!("{}:{}", prefix, hex::encode(id.0)))
+            .unwrap_or_else(|| format!("{};", prefix)); // because ';' is after ':'
 
         let mut msgs: Vec<Self> = db
-            .raw_range(TABLE_MESSAGES, &start, &end, limit)?
+            .raw_range(TABLE_MESSAGES, &start, &end, Some(limit))?
             .into_iter()
-            .map(|bytes| {
+            .map(|(_, bytes)| {
                 bincode::deserialize(&bytes).map_err(|err| KursalError::Storage(err.to_string()))
             })
             .collect::<Result<_>>()?;

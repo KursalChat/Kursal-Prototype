@@ -188,7 +188,7 @@
 
 <style>
   .composer {
-    background: rgba(17, 24, 39, 0.92);
+    background: var(--surface);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 8px 12px max(8px, env(safe-area-inset-bottom));
@@ -204,9 +204,9 @@
     height: 8px;
     background: linear-gradient(
       to top,
-      rgba(17, 24, 39, 0.92) 0%,
-      rgba(17, 24, 39, 0.55) 50%,
-      rgba(17, 24, 39, 0) 100%
+      var(--surface) 0%,
+      color-mix(in srgb, var(--surface) 60%, transparent) 50%,
+      transparent 100%
     );
     pointer-events: none;
     z-index: 1;

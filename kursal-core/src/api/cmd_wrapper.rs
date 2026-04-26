@@ -48,7 +48,6 @@ pub async fn publish_otp<S: StateWrapper>(state: S, otp: String) -> Result<()> {
     reply_rx
         .await
         .map_err(|err| KursalError::Network(err.to_string()))?
-        .map_err(Into::into)
 }
 
 pub async fn fetch_otp<S: StateWrapper>(state: S, otp: String) -> Result<ContactResponse> {
@@ -82,7 +81,6 @@ pub async fn export_ltc<S: StateWrapper>(state: S) -> Result<Vec<u8>> {
     reply_rx
         .await
         .map_err(|err| KursalError::Network(err.to_string()))?
-        .map_err(Into::into)
 }
 
 pub async fn import_ltc<S: StateWrapper>(state: S, bytes: Vec<u8>) -> Result<ContactResponse> {
@@ -374,6 +372,16 @@ pub async fn set_contact_blocked<S: StateWrapper>(
     Ok(())
 }
 
+pub async fn get_blocked_contacts<S: StateWrapper>(state: S) -> Result<Vec<ContactResponse>> {
+    let contacts = Contact::load_all(&*state.db_lock().await)?
+        .into_iter()
+        .filter(|user| user.blocked)
+        .map(ContactResponse::from)
+        .collect();
+
+    Ok(contacts)
+}
+
 pub async fn rotate_peer_id<S: StateWrapper>(state: S) -> Result<()> {
     let (reply_tx, reply_rx) = oneshot::channel();
 
@@ -383,20 +391,14 @@ pub async fn rotate_peer_id<S: StateWrapper>(state: S) -> Result<()> {
         .await
         .ok();
 
-    Ok(reply_rx
+    reply_rx
         .await
-        .map_err(|_| KursalError::Network("channel dropped".to_string()))??)
+        .map_err(|_| KursalError::Network("channel dropped".to_string()))?
 }
 
 pub async fn get_local_peer_id<S: StateWrapper>(state: S) -> Result<String> {
     let network = state.network_lock().await;
     Ok(network.primary.peer_id.to_base58())
-}
-
-pub async fn set_relay_server_enabled<S: StateWrapper>(state: S, value: bool) -> Result<()> {
-    crate::storage::set_relay_server_enabled(&*state.db_lock().await, value)?;
-
-    Ok(())
 }
 
 pub async fn get_local_user_id_hex<S: StateWrapper>(state: S) -> Result<String> {
@@ -410,7 +412,7 @@ pub async fn get_local_user_profile<S: StateWrapper>(
 ) -> Result<(String, Option<Vec<u8>>)> {
     let db = state.db_lock().await;
 
-    get_local_profile(&db).map_err(Into::into)
+    get_local_profile(&db)
 }
 
 pub async fn broadcast_profile<S: StateWrapper>(
@@ -439,7 +441,6 @@ pub async fn broadcast_profile<S: StateWrapper>(
     reply_rx
         .await
         .map_err(|err| KursalError::Network(err.to_string()))?
-        .map_err(Into::into)
 }
 
 pub async fn share_profile<S: StateWrapper>(

@@ -69,7 +69,7 @@
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--border);
-    background: rgba(17, 24, 39, 0.85);
+    background: var(--surface);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     flex-shrink: 0;

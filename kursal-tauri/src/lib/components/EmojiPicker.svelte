@@ -393,11 +393,10 @@
   .emoji-picker {
     width: min(352px, calc(100vw - 16px));
     max-height: min(420px, calc(100vh - 80px));
-    background: rgba(15, 23, 42, 0.97);
-    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
     border-radius: 14px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(20px);
+    box-shadow: var(--glow);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -449,8 +448,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 8px 10px;
     color: var(--text-muted);
@@ -476,21 +475,21 @@
     width: 20px;
     height: 20px;
     border-radius: 50%;
-    background: rgba(148, 163, 184, 0.2);
+    background: var(--bg-hover);
     color: var(--text-muted);
     cursor: pointer;
     transition: background 0.15s;
   }
 
   .clear-search:hover {
-    background: rgba(148, 163, 184, 0.35);
+    background: color-mix(in srgb, var(--bg-hover) 70%, var(--text-muted));
   }
 
   .category-tabs {
     display: flex;
     gap: 2px;
     padding: 8px 10px 6px;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    border-bottom: 1px solid var(--border);
   }
 
   .cat-tab {
@@ -505,11 +504,11 @@
   }
 
   .cat-tab:hover {
-    background: rgba(148, 163, 184, 0.15);
+    background: var(--bg-hover);
   }
 
   .cat-tab.active {
-    background: rgba(129, 140, 248, 0.2);
+    background: var(--accent-dim);
   }
 
   .emoji-grid-container {
@@ -531,7 +530,7 @@
     padding: 4px 4px 3px;
     position: sticky;
     top: 0;
-    background: rgba(15, 23, 42, 0.95);
+    background: var(--bg-secondary);
     z-index: 1;
   }
 
@@ -555,7 +554,7 @@
   }
 
   .emoji-btn:hover {
-    background: rgba(148, 163, 184, 0.18);
+    background: var(--bg-hover);
     transform: scale(1.15);
   }
 
