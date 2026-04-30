@@ -7,8 +7,9 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ContactResponse {
     pub user_id: String,
@@ -37,21 +38,21 @@ impl From<Contact> for ContactResponse {
         }
     }
 }
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReactionResponse {
     pub emoji: String,
     pub user_id: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct FileDetailsDto {
     pub filename: String,
     pub size_bytes: u64,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MessageResponse {
     pub id: String,
@@ -124,13 +125,13 @@ impl From<StoredMessage> for MessageResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OtpResponse {
     pub otp: String,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NearbyPeerResponse {
     pub peer_id: String,

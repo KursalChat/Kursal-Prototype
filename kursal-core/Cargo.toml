@@ -56,6 +56,8 @@ keyring-core = { workspace = true }
 # API
 axum = { workspace = true, features = ["ws"] }
 tower-http = { workspace = true, features = ["cors"] }
+utoipa ={ workspace = true }
+utoipa-swagger-ui = { workspace = true, features = ["axum"] }
 tokio-tungstenite = "0.29" # TODO: when possible, use workspace = true / requires ^29
 
 [dev-dependencies]

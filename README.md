@@ -19,13 +19,13 @@
 
 ---
 
-## ✨ What is Kursal?
+## What is Kursal?
 
 Kursal is a **peer-to-peer**, **end-to-end encrypted** messaging platform. No servers, no tracking. Just your private communications.
 
 If you want to read a more technical description of Kursal, check out our [**Whitepaper**](https://kursal.chat/kursal.pdf)!
 
-## 🤔 Why use Kursal?
+## Why use Kursal?
 
 Unlike traditional messaging apps, Kursal is fully decentralized and does not rely on central servers or on trust. This means:
 
@@ -36,7 +36,7 @@ Unlike traditional messaging apps, Kursal is fully decentralized and does not re
 > [!WARNING]
 > This software has not been independently audited. Security vulnerabilities may exist.
 
-## 📚 Future Enhancements
+## Future Enhancements
 
 We have a lot of exciting features in mind. Some of which are very hard for a small team like us to implement. We'll still do our best!
 
@@ -56,7 +56,7 @@ Here's a list of features we'd like to implement, which you can also find on our
  </picture>
 </a>
 
-## 📜 License
+## License
 
 © KursalChat - 2026
 

@@ -2,7 +2,7 @@
   import { goto, afterNavigate } from "$app/navigation";
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { listen } from "@tauri-apps/api/event";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
@@ -19,6 +19,7 @@
   import WinstonContactsTour from "$lib/components/WinstonContactsTour.svelte";
   import { setBadgeCount } from "$lib/api/window";
   import { uiState } from "$lib/state/ui.svelte";
+  import type { PeerIdHolderPayload } from "$lib/types";
 
   let { children } = $props();
 
@@ -50,18 +51,12 @@
   let search = $state("");
 
   onMount(() => {
-    let unlisten: UnlistenFn | undefined;
-
     (async () => {
       await profileState.load();
 
       try {
-        unlisten = await listen<string[]>("peer_id_rotated", async () => {
-          await profileState.refreshPeerId();
-        });
-
-        await listen<string>("contact_removed", (e) => {
-          const removedId = e.payload;
+        await listen<PeerIdHolderPayload>("contact_removed", (e) => {
+          const removedId = e.payload.peerId;
           contactsState.remove(removedId);
           if (currentChatId === removedId) {
             goto("/chat", { replaceState: true });
@@ -71,10 +66,6 @@
         console.error("Failed to set up listeners:", e);
       }
     })();
-
-    return () => {
-      unlisten?.();
-    };
   });
 
   const currentChatId = $derived(page.params.id);

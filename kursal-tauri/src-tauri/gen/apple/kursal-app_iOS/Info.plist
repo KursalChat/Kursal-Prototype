@@ -4,99 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
 	<string>Kursal</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
-	<key>CFBundleVersion</key>
-	<string>1.0.0</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>arm64</string>
-		<string>metal</string>
-	</array>
-	<key>UISupportedInterfaceOrientations</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-
-	<!-- Local network (mDNS nearby discovery + dev server) -->
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Kursal uses your local network to discover nearby peers for direct, encrypted peer-to-peer messaging.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_p2p._udp</string>
-		<string>_p2p._tcp</string>
-	</array>
-
-	<!-- Camera (QR/barcode contact exchange) -->
-	<key>NSCameraUsageDescription</key>
-	<string>Kursal uses the camera to scan QR codes when adding a new contact.</string>
-
-	<!-- Photos (profile avatar picker) -->
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Kursal needs access to your photos so you can pick a profile picture.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Kursal may save received images to your photo library.</string>
-
-	<!-- Documents (file transfer) -->
-	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Kursal reads files you pick so you can send them to a contact, and writes files you receive.</string>
-	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Kursal saves received files to your Downloads folder.</string>
-
-	<!-- Microphone (future voice calls — harmless to pre-declare) -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Kursal uses the microphone only during voice calls with your contacts.</string>
-
-	<!-- Face ID / Touch ID (optional unlock) -->
-	<key>NSFaceIDUsageDescription</key>
-	<string>Kursal uses Face ID to unlock the app.</string>
-
-	<!-- App Transport Security: allow localhost dev + Tauri IPC webview -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
-	</dict>
-
-	<!-- Export compliance: we ship strong end-to-end encryption. Set to false and
-	     provide documentation or use exemption category 5D002.a via App Store Connect. -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<true/>
-	<key>ITSEncryptionExportComplianceCode</key>
-	<string></string>
-
-	<!-- Status bar -->
-	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleDefault</string>
-	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<true/>
-
-	<!-- File associations (.kursal export files) -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -112,6 +21,80 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1.0.0</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
+	<key>ITSEncryptionExportComplianceCode</key>
+	<string></string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoadsInWebContent</key>
+		<true/>
+	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Kursal uses Bluetooth to discover nearby devices</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_p2p._udp</string>
+		<string>_p2p._tcp</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Kursal uses the camera to scan QR codes when adding a new contact.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Kursal saves received files to your Desktop when you choose it.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Kursal reads files you pick so you can send them, and writes files you receive.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Kursal saves received files to your Downloads folder.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Kursal uses Face ID to unlock the app.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Kursal uses your local network to discover nearby peers for direct, encrypted peer-to-peer messaging.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Kursal uses the microphone only during voice calls with your contacts.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Kursal may save received images to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kursal needs access to your photos so you can pick a profile picture.</string>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>arm64</string>
+		<string>metal</string>
+	</array>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleDefault</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

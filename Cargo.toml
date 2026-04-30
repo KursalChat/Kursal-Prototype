@@ -3,7 +3,7 @@ members = ["kursal-cli", "kursal-core", "kursal-tauri/src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.14"
+version = "0.0.1-alpha.16"
 authors = ["Kodeur_Kubik <kubik@kursal.chat>", "Arlo <arlo@kursal.chat>"]
 edition = "2024"
 license = "AGPL-3.0-only"
@@ -69,6 +69,8 @@ dbus-secret-service-keyring-store = "1"
 # API
 axum = "0.8"
 tower-http = "0.6"
+utoipa = "5"
+utoipa-swagger-ui = "9"
 
 # Misc
 emojis = "0.8"

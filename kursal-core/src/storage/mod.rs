@@ -172,8 +172,7 @@ impl Database {
 
         let op = table
             .range(start..=end)
-            .map_err(|err| KursalError::Storage(err.to_string()))?
-            .rev();
+            .map_err(|err| KursalError::Storage(err.to_string()))?;
 
         let op: Box<dyn Iterator<Item = _>> = if let Some(limit) = limit {
             Box::new(op.take(limit))
@@ -788,15 +787,15 @@ impl AutoAcceptConfig {
     }
 }
 
-pub fn get_auto_accept_config(db: &Database) -> Result<AutoAcceptConfig> {
-    Ok(db
-        .raw_read(TABLE_SETTINGS, "auto_accept_config")?
-        .map(|bytes| AutoAcceptConfig::deserialize(&bytes))
-        .transpose()?
-        .unwrap_or(AutoAcceptConfig {
-            mode: "nobody".to_string(),
-            size_cap_bytes: 2 * 1024 * 1024,
-        }))
+pub fn get_auto_accept_config(db: &Database) -> AutoAcceptConfig {
+    let default = AutoAcceptConfig {
+        mode: "nobody".to_string(),
+        size_cap_bytes: 2 * 1024 * 1024,
+    };
+    match db.raw_read(TABLE_SETTINGS, "auto_accept_config") {
+        Ok(Some(bytes)) => AutoAcceptConfig::deserialize(&bytes).unwrap_or(default),
+        _ => default,
+    }
 }
 
 pub fn set_auto_accept_config(db: &Database, config: AutoAcceptConfig) -> Result<()> {
@@ -822,15 +821,16 @@ impl AutoDownloadConfig {
     }
 }
 
-pub fn get_auto_download_config(db: &Database) -> Result<AutoDownloadConfig> {
-    Ok(db
-        .raw_read(TABLE_SETTINGS, "auto_download_config")?
-        .map(|bytes| AutoDownloadConfig::deserialize(&bytes))
-        .transpose()?
-        .unwrap_or(AutoDownloadConfig {
-            scope: "all_contacts".to_string(),
-            limit_bytes: 100 * 1024 * 1024,
-        }))
+pub fn get_auto_download_config(db: &Database) -> AutoDownloadConfig {
+    let default = AutoDownloadConfig {
+        scope: "all_contacts".to_string(),
+        limit_bytes: 100 * 1024 * 1024,
+    };
+
+    match db.raw_read(TABLE_SETTINGS, "auto_download_config") {
+        Ok(Some(bytes)) => AutoDownloadConfig::deserialize(&bytes).unwrap_or(default),
+        _ => default,
+    }
 }
 
 pub fn set_auto_download_config(db: &Database, config: AutoDownloadConfig) -> Result<()> {
@@ -897,7 +897,7 @@ pub fn api_server_password(db: &Database) -> Result<String> {
         }
     }
 }
-pub fn hash_new_api_server_password() -> Result<(String, String)> {
+pub fn set_new_api_server_password(db: &Database) -> Result<String> {
     let mut bytes = [0u8; 32];
     OsRng
         .try_fill_bytes(&mut bytes)
@@ -913,12 +913,13 @@ pub fn hash_new_api_server_password() -> Result<(String, String)> {
         .map_err(|err| KursalError::Crypto(err.to_string()))?
         .to_string();
 
-    Ok((token, password_hash))
-}
+    db.raw_write(
+        TABLE_SETTINGS,
+        "api_server_password",
+        password_hash.as_bytes(),
+    )?;
 
-pub fn set_api_server_password_hash(db: &Database, hash: &str) -> Result<()> {
-    db.raw_write(TABLE_SETTINGS, "api_server_password", hash.as_bytes())?;
-    Ok(())
+    Ok(token)
 }
 
 pub fn api_server_config(db: &Database) -> Result<LocalApiConfig> {
@@ -942,11 +943,12 @@ pub fn set_api_server_config(db: &Database, config: LocalApiConfig) -> Result<()
 //
 
 pub fn get_peer_rotation_interval(db: &Database) -> u64 {
-    db.raw_read(TABLE_SETTINGS, "peer_rotation_interval_secs")
-        .ok()
-        .flatten()
-        .and_then(|b| b.try_into().ok().map(u64::from_be_bytes))
-        .unwrap_or(30 * 60 * 60)
+    let default = 30 * 60 * 60;
+
+    match db.raw_read(TABLE_SETTINGS, "peer_rotation_interval_secs") {
+        Ok(Some(bytes)) => bytes.try_into().map(u64::from_be_bytes).unwrap_or(default),
+        _ => default,
+    }
 }
 pub fn set_peer_rotation_interval(db: &Database, value: u64) -> Result<()> {
     db.raw_write(
@@ -973,18 +975,17 @@ impl RelayConfig {
         bincode::deserialize(bytes).map_err(|err| KursalError::Storage(err.to_string()))
     }
 }
-pub fn get_relay_config(db: &Database) -> Result<RelayConfig> {
-    let entry = db
-        .raw_read(TABLE_SETTINGS, "relay_config")?
-        .map(|bytes| RelayConfig::deserialize(&bytes))
-        .transpose()?
-        .unwrap_or(RelayConfig {
-            enabled: true,
-            max_connections: 100u32,
-            max_connections_per_ip: 3u32,
-        });
+pub fn get_relay_config(db: &Database) -> RelayConfig {
+    let default = RelayConfig {
+        enabled: true,
+        max_connections: 100u32,
+        max_connections_per_ip: 3u32,
+    };
 
-    Ok(entry)
+    match db.raw_read(TABLE_SETTINGS, "relay_config") {
+        Ok(Some(bytes)) => RelayConfig::deserialize(&bytes).unwrap_or(default),
+        _ => default,
+    }
 }
 pub fn set_relay_config(db: &Database, value: RelayConfig) -> Result<()> {
     let bytes = value.serialize()?;
@@ -1014,12 +1015,13 @@ pub fn set_swarm_listening_port(db: &Database, port: Option<u16>) -> Result<()> 
     Ok(())
 }
 
-pub fn get_swarm_mdns_enabled(db: &Database) -> Result<bool> {
-    let value = db
-        .raw_read(TABLE_SETTINGS, "swarm_mdns_enabled")?
-        .unwrap_or(vec![1u8]);
+pub fn get_swarm_mdns_enabled(db: &Database) -> bool {
+    let default = true;
 
-    Ok(value == vec![1u8])
+    match db.raw_read(TABLE_SETTINGS, "swarm_mdns_enabled") {
+        Ok(Some(bytes)) => bytes == vec![1u8],
+        _ => default,
+    }
 }
 pub fn set_swarm_mdns_enabled(db: &Database, value: bool) -> Result<()> {
     db.raw_write(
@@ -1031,12 +1033,13 @@ pub fn set_swarm_mdns_enabled(db: &Database, value: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn get_updater_enabled(db: &Database) -> Result<bool> {
-    let value = db
-        .raw_read(TABLE_SETTINGS, "updater_enabled")?
-        .unwrap_or(vec![1u8]);
+pub fn get_updater_enabled(db: &Database) -> bool {
+    let default = true;
 
-    Ok(value == vec![1u8])
+    match db.raw_read(TABLE_SETTINGS, "updater_enabled") {
+        Ok(Some(bytes)) => bytes == vec![1u8],
+        _ => default,
+    }
 }
 pub fn set_updater_enabled(db: &Database, value: bool) -> Result<()> {
     db.raw_write(
@@ -1048,12 +1051,13 @@ pub fn set_updater_enabled(db: &Database, value: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn get_typing_indicators_enabled(db: &Database) -> Result<bool> {
-    let value = db
-        .raw_read(TABLE_SETTINGS, "typing_indicators_enabled")?
-        .unwrap_or(vec![1u8]);
+pub fn get_typing_indicators_enabled(db: &Database) -> bool {
+    let default = true;
 
-    Ok(value == vec![1u8])
+    match db.raw_read(TABLE_SETTINGS, "typing_indicators_enabled") {
+        Ok(Some(bytes)) => bytes == vec![0u8],
+        _ => default,
+    }
 }
 pub fn set_typing_indicators_enabled(db: &Database, value: bool) -> Result<()> {
     db.raw_write(
@@ -1067,19 +1071,22 @@ pub fn set_typing_indicators_enabled(db: &Database, value: bool) -> Result<()> {
 
 //
 
-pub fn get_local_profile(db: &Database) -> Result<(String, Option<Vec<u8>>)> {
-    let username = std::str::from_utf8(
-        &db.raw_read(TABLE_SETTINGS, "local_profile_username")?
-            .unwrap_or("You".as_bytes().to_vec()),
-    )
-    .unwrap_or("You")
-    .to_string();
+pub fn get_local_profile(db: &Database) -> (String, Option<Vec<u8>>) {
+    let default_username = "You".to_string();
+    let username = match db.raw_read(TABLE_SETTINGS, "local_profile_username") {
+        Ok(Some(bytes)) => std::str::from_utf8(&bytes)
+            .map(|v| v.to_string())
+            .unwrap_or(default_username),
+        _ => default_username,
+    };
 
-    let avatar = db
-        .raw_read(TABLE_SETTINGS, "local_profile_avatar")?
-        .and_then(|bytes| if bytes.is_empty() { None } else { Some(bytes) });
+    let default_avatar = None;
+    let avatar = match db.raw_read(TABLE_SETTINGS, "local_profile_avatar") {
+        Ok(Some(bytes)) => Some(bytes),
+        _ => default_avatar,
+    };
 
-    Ok((username, avatar))
+    (username, avatar)
 }
 pub fn set_local_profile(
     db: &Database,

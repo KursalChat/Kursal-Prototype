@@ -58,6 +58,10 @@ export interface NearbyRequestPayload {
   sessionName: string;
 }
 
+export interface PeerIdHolderPayload {
+  peerId: string;
+}
+
 export interface MessageEditedPayload {
   contactId: string;
   messageId: string;

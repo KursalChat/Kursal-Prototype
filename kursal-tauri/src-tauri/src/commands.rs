@@ -13,8 +13,8 @@ use kursal_core::storage::{
     AutoAcceptConfig, AutoDownloadConfig, Database, RelayConfig, SharedFileEntry, StorageUsage,
     api_server_config, delete_message_history_all, delete_message_history_for, files_list_shared,
     files_revoke_shared, get_local_profile, get_local_user_id, get_swarm_listening_port,
-    get_swarm_mdns_enabled, hash_new_api_server_password, reset_full_app, set_api_server_config,
-    set_api_server_password_hash, set_swarm_listening_port, set_swarm_mdns_enabled,
+    get_swarm_mdns_enabled, reset_full_app, set_api_server_config, set_new_api_server_password,
+    set_swarm_listening_port, set_swarm_mdns_enabled,
 };
 use std::collections::HashMap;
 use tauri_plugin_opener::OpenerExt;
@@ -123,6 +123,16 @@ pub async fn decline_nearby(state: tauri::State<'_, AppState>, peer_id: String) 
 }
 
 #[tauri::command]
+pub async fn get_contact(
+    state: tauri::State<'_, AppState>,
+    contact_id: String,
+) -> Result<Option<ContactResponse>> {
+    cmd_wrapper::get_contact(AppStateWrapper(state), contact_id)
+        .await
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub async fn get_contacts(state: tauri::State<'_, AppState>) -> Result<Vec<ContactResponse>> {
     cmd_wrapper::get_contacts(AppStateWrapper(state))
         .await
@@ -134,7 +144,11 @@ pub async fn remove_contact(state: tauri::State<'_, AppState>, contact_id: Strin
     let file_dir = cache_dir()?.join(&contact_id);
 
     cmd_wrapper::remove_contact(AppStateWrapper(state), contact_id).await?;
-    remove_dir_all(file_dir).await.map_err(KursalError::Io)?;
+    match remove_dir_all(&file_dir).await {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(KursalError::Io(e).into()),
+    }
 
     Ok(())
 }
@@ -251,7 +265,7 @@ pub async fn get_local_user_profile(
 ) -> Result<(String, Option<Vec<u8>>)> {
     let db = state.db.0.lock().await;
 
-    get_local_profile(&db).map_err(Into::into)
+    Ok(get_local_profile(&db))
 }
 
 #[tauri::command]
@@ -372,7 +386,9 @@ pub async fn get_storage_usage(state: tauri::State<'_, AppState>) -> Result<Stor
 pub async fn get_auto_download_config(
     state: tauri::State<'_, AppState>,
 ) -> Result<AutoDownloadConfig> {
-    kursal_core::storage::get_auto_download_config(&*state.db.0.lock().await).map_err(Into::into)
+    Ok(kursal_core::storage::get_auto_download_config(
+        &*state.db.0.lock().await,
+    ))
 }
 #[tauri::command]
 pub async fn set_auto_download_config(
@@ -385,7 +401,9 @@ pub async fn set_auto_download_config(
 
 #[tauri::command]
 pub async fn get_auto_accept_config(state: tauri::State<'_, AppState>) -> Result<AutoAcceptConfig> {
-    kursal_core::storage::get_auto_accept_config(&*state.db.0.lock().await).map_err(Into::into)
+    Ok(kursal_core::storage::get_auto_accept_config(
+        &*state.db.0.lock().await,
+    ))
 }
 #[tauri::command]
 pub async fn set_auto_accept_config(
@@ -420,7 +438,7 @@ pub async fn revoke_shared_files_bulk(
 
 #[tauri::command]
 pub async fn get_nearby_share_enabled(state: tauri::State<'_, AppState>) -> Result<bool> {
-    get_swarm_mdns_enabled(&*state.db.0.lock().await).map_err(Into::into)
+    Ok(get_swarm_mdns_enabled(&*state.db.0.lock().await))
 }
 #[tauri::command]
 pub async fn set_nearby_share_enabled(
@@ -432,7 +450,9 @@ pub async fn set_nearby_share_enabled(
 
 #[tauri::command]
 pub async fn get_relay_config(state: tauri::State<'_, AppState>) -> Result<RelayConfig> {
-    kursal_core::storage::get_relay_config(&*state.db.0.lock().await).map_err(Into::into)
+    Ok(kursal_core::storage::get_relay_config(
+        &*state.db.0.lock().await,
+    ))
 }
 #[tauri::command]
 pub async fn set_relay_config(
@@ -469,10 +489,13 @@ pub async fn set_local_api_config(
 }
 #[tauri::command]
 pub async fn generate_local_api_token(state: tauri::State<'_, AppState>) -> Result<String> {
-    let (token, hash) = tokio::task::spawn_blocking(hash_new_api_server_password)
-        .await
-        .map_err(|err| KursalError::Crypto(err.to_string()))??;
-    set_api_server_password_hash(&*state.db.0.lock().await, &hash)?;
+    let db = state.db.clone();
+
+    let token =
+        tokio::task::spawn_blocking(async move || set_new_api_server_password(&*db.0.lock().await))
+            .await
+            .map_err(|err| KursalError::Crypto(err.to_string()))?
+            .await?;
     Ok(token)
 }
 
@@ -534,8 +557,9 @@ pub async fn set_peer_rotation_interval(
 
 #[tauri::command]
 pub async fn get_typing_indicators_enabled(state: tauri::State<'_, AppState>) -> Result<bool> {
-    kursal_core::storage::get_typing_indicators_enabled(&*state.db.0.lock().await)
-        .map_err(Into::into)
+    Ok(kursal_core::storage::get_typing_indicators_enabled(
+        &*state.db.0.lock().await,
+    ))
 }
 #[tauri::command]
 pub async fn set_typing_indicators_enabled(
@@ -585,7 +609,9 @@ pub async fn import_backup(
 
 #[tauri::command]
 pub async fn get_updater_enabled(state: tauri::State<'_, AppState>) -> Result<bool> {
-    kursal_core::storage::get_updater_enabled(&*state.db.0.lock().await).map_err(Into::into)
+    Ok(kursal_core::storage::get_updater_enabled(
+        &*state.db.0.lock().await,
+    ))
 }
 #[tauri::command]
 pub async fn set_updater_enabled(state: tauri::State<'_, AppState>, value: bool) -> Result<()> {

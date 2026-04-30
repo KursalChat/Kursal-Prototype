@@ -192,6 +192,20 @@ pub async fn get_contacts<S: StateWrapper>(state: S) -> Result<Vec<ContactRespon
     Ok(contacts.into_iter().map(ContactResponse::from).collect())
 }
 
+pub async fn get_contact<S: StateWrapper>(
+    state: S,
+    contact_id: String,
+) -> Result<Option<ContactResponse>> {
+    let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+        .map_err(|err| KursalError::Crypto(err.to_string()))?
+        .try_into()
+        .map_err(|_| KursalError::Crypto("Invalid contact id length".to_string()))?;
+
+    let contact = Contact::load(&*state.db_lock().await, &UserId(user_id_bytes))?;
+
+    Ok(contact.map(ContactResponse::from))
+}
+
 pub async fn remove_contact<S: StateWrapper>(state: S, contact_id: String) -> Result<()> {
     let (reply_tx, reply_rx) = oneshot::channel();
 
@@ -407,9 +421,7 @@ pub async fn get_local_user_id_hex<S: StateWrapper>(state: S) -> Result<String> 
     Ok(hex::encode(uid.0))
 }
 
-pub async fn get_local_user_profile<S: StateWrapper>(
-    state: S,
-) -> Result<(String, Option<Vec<u8>>)> {
+pub async fn get_local_user_profile<S: StateWrapper>(state: S) -> (String, Option<Vec<u8>>) {
     let db = state.db_lock().await;
 
     get_local_profile(&db)

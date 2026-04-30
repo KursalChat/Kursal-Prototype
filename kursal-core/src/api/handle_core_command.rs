@@ -580,9 +580,12 @@ pub async fn handle_core_command(
                     &updated_entry.serialize()?,
                 )?;
 
-                let contact = Contact::load_all(&*db.0.lock().await)?
-                    .into_iter()
-                    .find(|c| hex::encode(c.user_id.0) == contact_id)
+                let user_id_bytes: [u8; 32] = hex::decode(&contact_id)
+                    .map_err(|err| KursalError::Crypto(err.to_string()))?
+                    .try_into()
+                    .map_err(|_| KursalError::Crypto("Invalid contact id length".to_string()))?;
+
+                let contact = Contact::load(&*db.0.lock().await, &UserId(user_id_bytes))?
                     .ok_or_else(|| KursalError::Identity("Unknown contact".to_string()))?;
 
                 let offer_id_bytes: [u8; 16] = hex::decode(&offer_id)

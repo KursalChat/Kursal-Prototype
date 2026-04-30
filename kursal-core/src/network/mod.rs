@@ -53,8 +53,8 @@ impl NetworkManager {
         let identity = init_transport(db)?;
 
         let port = get_swarm_listening_port(db);
-        let relay_config = get_relay_config(db)?;
-        let mdns_enabled = get_swarm_mdns_enabled(db)?;
+        let relay_config = get_relay_config(db);
+        let mdns_enabled = get_swarm_mdns_enabled(db);
 
         let primary = SwarmHandle::spawn(
             identity,
@@ -434,6 +434,7 @@ async fn handle_internal_network_event(
             log::info!("[network] connection established with {peer_id} via {via:?}");
             let peer_id_str = peer_id.to_base58();
 
+            // again, must get from peerid and entry is by userid
             if let Ok(contacts) = Contact::load_all(&*db.0.lock().await)
                 && let Some(contact) = contacts.iter().find(|c| c.peer_id == peer_id_str)
             {

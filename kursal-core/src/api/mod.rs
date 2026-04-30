@@ -66,15 +66,9 @@ pub enum AppEvent {
     ContactRemoved {
         contact_id: UserId,
     },
-    PeerIdRotated {
-        new_addresses: Vec<String>,
-    },
     ConnectionChange {
         contact_id: UserId,
         status: ConnectionStatus,
-    },
-    LTCExpiringSoon {
-        hours_remaining: u32,
     },
     NearbyRequest {
         peer_id: String,

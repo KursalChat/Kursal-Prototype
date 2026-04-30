@@ -171,6 +171,7 @@ impl SwarmHandle {
                         enable_ipv6: false,
                     }, local_peer_id)?))
                 } else {
+                    log::info!("mDNS disabled");
                     Toggle::from(None)
                 };
 

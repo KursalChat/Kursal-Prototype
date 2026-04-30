@@ -39,7 +39,7 @@
     outro: {
       img: "/winston-warm.png",
       title: "You're all set!",
-      body: "That's the lot. Pick whichever method fits the moment. Welcome to Kursal, hope you stick around.",
+      body: "Pick whichever method fits the moment. Welcome to Kursal, hope you stick around.",
       cta: "Let's go",
     },
   };

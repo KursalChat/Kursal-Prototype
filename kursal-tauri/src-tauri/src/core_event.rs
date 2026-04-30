@@ -161,10 +161,6 @@ pub async fn handle_core_event(
             );
         }
 
-        AppEvent::PeerIdRotated { new_addresses } => {
-            emitter(handle, api_handle, "peer_id_rotated", new_addresses);
-        }
-
         AppEvent::ConnectionChange { contact_id, status } => {
             emitter(
                 handle,
@@ -181,10 +177,6 @@ pub async fn handle_core_event(
                     }
                 }),
             );
-        }
-
-        AppEvent::LTCExpiringSoon { hours_remaining } => {
-            emitter(handle, api_handle, "ltc_expiring_soon", hours_remaining);
         }
 
         AppEvent::NearbyRequest {
@@ -213,7 +205,9 @@ pub async fn handle_core_event(
                 handle,
                 api_handle,
                 "contact_removed",
-                hex::encode(contact_id.0),
+                serde_json::json!({
+                    "peerId": hex::encode(contact_id.0),
+                }),
             );
         }
         AppEvent::FileOffered {

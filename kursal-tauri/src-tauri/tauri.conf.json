@@ -29,7 +29,7 @@
         "enable": true,
         "scope": ["**"]
       },
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: asset: http://asset.localhost https://asset.localhost; media-src 'self' asset: http://asset.localhost https://asset.localhost; font-src 'self'; connect-src 'self' ipc://localhost https://ipc.localhost asset: http://asset.localhost https://asset.localhost"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https: asset: http://asset.localhost https://asset.localhost; media-src 'self' asset: http://asset.localhost https://asset.localhost; font-src 'self'; connect-src 'self' ipc://localhost https://ipc.localhost asset: http://asset.localhost https://asset.localhost"
     }
   },
   "bundle": {
@@ -65,7 +65,10 @@
         "rank": "Owner",
         "role": "Editor"
       }
-    ]
+    ],
+    "iOS": {
+      "minimumSystemVersion": "15.6"
+    }
   },
   "plugins": {
     "updater": {

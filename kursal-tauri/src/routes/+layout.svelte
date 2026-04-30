@@ -195,30 +195,6 @@
       }),
     );
 
-    // Listen to peer_id_rotated event (OUR OWN rotation was published)
-    unlistenPromises.push(
-      listen<string[]>("peer_id_rotated", (event) => {
-        const count = event.payload?.length ?? 0;
-        console.log(
-          "\n\n" +
-            "╔══════════════════════════════════════════╗\n" +
-            "║         OWN PEER ID ROTATED              ║\n" +
-            "╚══════════════════════════════════════════╝\n" +
-            `  new addresses published: ${count}\n` +
-            (event.payload ?? []).map((a, i) => `  [${i}] ${a}`).join("\n") +
-            "\n",
-        );
-        notifications.push(
-          count > 0
-            ? `Peer ID rotated. ${count} new address${count === 1 ? "" : "es"} published.`
-            : "Peer ID rotated.",
-          "success",
-        );
-        // Reload contacts so their peerId fields reflect the new peer IDs
-        contactsState.load();
-      }),
-    );
-
     // Listen to contact_updated event (Either peer ID rotated, OR profile updated)
     unlistenPromises.push(
       listen<ContactResponse>("contact_updated", (event) => {
@@ -265,17 +241,6 @@
             "info",
           );
         }
-      }),
-    );
-
-    // Listen to ltc_expiring_soon event
-    unlistenPromises.push(
-      listen<number>("ltc_expiring_soon", (event) => {
-        const hours = event.payload;
-        notifications.push(
-          `Long-term code expires in ${hours} hour${hours === 1 ? "" : "s"}.`,
-          "info",
-        );
       }),
     );
 

@@ -30,6 +30,10 @@ use std::{
 };
 use tokio::sync::{Mutex, MutexGuard, broadcast, mpsc, oneshot};
 use tower_http::cors::CorsLayer;
+use utoipa::{
+    Modify, OpenApi, ToSchema,
+    openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme},
+};
 
 pub mod auth;
 pub mod iprecord;
@@ -85,6 +89,52 @@ impl StateWrapper for APIAppState {
     }
 }
 
+struct BearerAuth;
+impl Modify for BearerAuth {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        if let Some(components) = openapi.components.as_mut() {
+            components.add_security_scheme(
+                "bearerAuth",
+                SecurityScheme::Http(
+                    HttpBuilder::new()
+                        .scheme(HttpAuthScheme::Bearer)
+                        .bearer_format("JWT")
+                        .build(),
+                ),
+            );
+        }
+    }
+}
+
+#[derive(utoipa::OpenApi)]
+#[openapi(
+    info(
+        title = "Kursal API",
+    ),
+    modifiers(&BearerAuth),
+    security(("bearerAuth" = [])),
+    tags(
+        (name = "Self",       description = "Current user identity & profile"),
+        (name = "OTP",        description = "One-time password operations"),
+        (name = "LTC",        description = "Long-term credential import/export"),
+        (name = "Nearby",     description = "Nearby peer discovery & connection"),
+        (name = "Contacts",   description = "Contact management & blocking"),
+        (name = "Messages",   description = "Manage messages"),
+    ),
+    paths(
+        api_self_get_user_id, api_self_get_profile, api_self_post_profile, api_self_get_peer_id, api_self_rotate_peer_id,
+        api_otp_generate, api_otp_fetch,
+        api_ltc_export, api_ltc_import,
+        api_nearby_start, api_nearby_stop, api_nearby_get, api_nearby_connect, api_nearby_accept, api_nearby_decline,
+        api_contacts, api_contact_security_code, api_contact_security_code_confirm, api_contact_share_profile, api_contact_get, api_contact_remove, api_contact_blocked_list, api_contact_block, api_contact_unblock,
+        api_typing, api_messages_send, api_messages_get, api_message_delete_local, api_message_delete, api_message_edit, api_message_reaction_add, api_message_reaction_remove, api_files_send, api_files_accept,
+    ),
+    components(schemas(
+        APISelfProfile, OtpResponse, ContactResponse, NearbyPeerResponse, MessageResponse, APIFile, APIFileDetails,
+    )),
+)]
+struct ApiDoc;
+
 pub async fn run_server(
     auth_token: String,
     api_config: LocalApiConfig,
@@ -104,14 +154,8 @@ pub async fn run_server(
         event_tx,
     };
 
-    let app = Router::new()
-        .layer(CorsLayer::new())
-        .route("/", get(root))
+    let protected = Router::new()
         .route("/ws", any(ws_handler))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth_middleware,
-        ))
         //
         .route("/self/user_id", get(api_self_get_user_id))
         .route("/self/profile", get(api_self_get_profile))
@@ -120,7 +164,6 @@ pub async fn run_server(
         .route("/self/peer_id", delete(api_self_rotate_peer_id))
         //
         .route("/otp/generate", post(api_otp_generate))
-        .route("/otp/publish", post(api_otp_publish))
         .route("/otp/fetch", post(api_otp_fetch))
         //
         .route("/ltc/export", post(api_ltc_export))
@@ -131,30 +174,31 @@ pub async fn run_server(
         .route("/nearby", get(api_nearby_get))
         .route(
             "/nearby/{peer_id}/connect/{method}",
-            get(api_nearby_connect),
+            post(api_nearby_connect),
         )
-        .route("/nearby/{peer_id}/accept", get(api_nearby_accept))
-        .route("/nearby/{peer_id}/decline", get(api_nearby_decline))
+        .route("/nearby/{peer_id}/accept", post(api_nearby_accept))
+        .route("/nearby/{peer_id}/decline", post(api_nearby_decline))
         //
         .route("/contacts", get(api_contacts))
         .route(
-            "/contact/{user_id}/security_code",
+            "/contact/{contact_id}/security_code",
             get(api_contact_security_code),
         )
         .route(
-            "/contact/{user_id}/security_code",
+            "/contact/{contact_id}/security_code",
             post(api_contact_security_code_confirm),
         )
         .route(
-            "/contact/{user_id}/profile",
+            "/contact/{contact_id}/profile",
             post(api_contact_share_profile),
         )
-        .route("/contact/{user_id}", delete(api_contact_remove))
+        .route("/contact/{contact_id}", get(api_contact_get))
+        .route("/contact/{contact_id}", delete(api_contact_remove))
         .route("/contacts/blocked", get(api_contact_blocked_list))
-        .route("/contact/{user_id}/block", post(api_contact_block))
-        .route("/contact/{user_id}/unblock", post(api_contact_unblock))
+        .route("/contact/{contact_id}/block", post(api_contact_block))
+        .route("/contact/{contact_id}/unblock", post(api_contact_unblock))
         //
-        .route("/typing", post(api_typing))
+        .route("/typing/{contact_id}", post(api_typing))
         .route("/messages/{contact_id}", post(api_messages_send))
         .route("/messages/{contact_id}", get(api_messages_get))
         .route(
@@ -177,10 +221,18 @@ pub async fn run_server(
             "/messages/{contact_id}/{message_id}/reactions/{emoji}",
             delete(api_message_reaction_remove),
         )
-        //
         .route("/files/{contact_id}", post(api_files_send))
         .route("/files/{contact_id}/{offer_id}", post(api_files_accept))
         //
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    let app = Router::new()
+        .merge(protected)
+        .merge(utoipa_swagger_ui::SwaggerUi::new("/").url("/openapi.json", ApiDoc::openapi()))
+        .layer(CorsLayer::new())
         .with_state(state)
         .into_make_service_with_connect_info::<SocketAddr>();
 
@@ -192,7 +244,7 @@ pub async fn run_server(
             "127.0.0.1"
         },
         api_config.port
-    )) // "127.0.0.1:4892"
+    ))
     .await
     .map_err(|err| KursalError::Network(err.to_string()))?;
 
@@ -201,10 +253,6 @@ pub async fn run_server(
         .map_err(|err| KursalError::Network(err.to_string()))?;
 
     Ok(())
-}
-
-async fn root() -> String {
-    format!("Kursal v{}\n", env!("CARGO_PKG_VERSION"))
 }
 
 //
@@ -253,22 +301,30 @@ async fn handle_socket(socket: WebSocket, state: APIAppState) {
 
 //
 
-async fn api_otp_generate() -> Result<Json<OtpResponse>> {
-    cmd_wrapper::generate_otp()
-        .await
-        .map(Json)
-        .map_err(Into::into)
+#[utoipa::path(
+    post,
+    path = "/otp/generate",
+    tag = "OTP",
+    responses(
+        (status = 200, description = "Generated OTP", body = OtpResponse)
+    )
+)]
+async fn api_otp_generate(State(state): State<APIAppState>) -> Result<Json<OtpResponse>> {
+    let otp = cmd_wrapper::generate_otp().await?;
+    cmd_wrapper::publish_otp(state, otp.otp.clone()).await?;
+
+    Ok(Json(otp))
 }
 
-async fn api_otp_publish(
-    State(state): State<APIAppState>,
-    Json(OtpResponse { otp }): Json<OtpResponse>,
-) -> Result<()> {
-    cmd_wrapper::publish_otp(state, otp)
-        .await
-        .map_err(Into::into)
-}
-
+#[utoipa::path(
+    post,
+    path = "/otp/fetch",
+    tag = "OTP",
+    request_body = OtpResponse,
+    responses(
+        (status = 200, description = "Fetched OTP", body = ContactResponse)
+    )
+)]
 async fn api_otp_fetch(
     State(state): State<APIAppState>,
     Json(OtpResponse { otp }): Json<OtpResponse>,
@@ -279,10 +335,30 @@ async fn api_otp_fetch(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/ltc/export",
+    tag = "LTC",
+    responses(
+        (status = 200, description = "Exported LTC", body = Vec<u8>)
+    )
+)]
 async fn api_ltc_export(State(state): State<APIAppState>) -> Result<Vec<u8>> {
     cmd_wrapper::export_ltc(state).await.map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/ltc/import",
+    tag = "LTC",
+    request_body(
+        content = Vec<u8>,
+        content_type = "application/octet-stream"
+    ),
+    responses(
+        (status = 200, description = "Imported LTC", body = ContactResponse)
+    )
+)]
 async fn api_ltc_import(
     State(state): State<APIAppState>,
     bytes: Bytes,
@@ -293,14 +369,38 @@ async fn api_ltc_import(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/nearby/start",
+    tag = "Nearby",
+    responses(
+        (status = 200, description = "Started Nearby", body = String)
+    )
+)]
 async fn api_nearby_start(State(state): State<APIAppState>) -> Result<String> {
     cmd_wrapper::start_nearby(state).await.map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/nearby/stop",
+    tag = "Nearby",
+    responses(
+        (status = 200, description = "Stopped Nearby")
+    )
+)]
 async fn api_nearby_stop(State(state): State<APIAppState>) -> Result<()> {
     cmd_wrapper::stop_nearby(state).await.map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/nearby",
+    tag = "Nearby",
+    responses(
+        (status = 200, description = "Got Nearby peers", body = Vec<NearbyPeerResponse>)
+    )
+)]
 async fn api_nearby_get(State(state): State<APIAppState>) -> Result<Json<Vec<NearbyPeerResponse>>> {
     cmd_wrapper::get_nearby_peers(state)
         .await
@@ -308,6 +408,18 @@ async fn api_nearby_get(State(state): State<APIAppState>) -> Result<Json<Vec<Nea
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/nearby/{peer_id}/connect/{method}",
+    tag = "Nearby",
+    params(
+        ("peer_id" = String, Path, description = "Peer ID"),
+        ("method" = String, Path, description = "Connection method (bluetooth or mdns)"),
+    ),
+    responses(
+        (status = 200, description = "Connected")
+    )
+)]
 async fn api_nearby_connect(
     State(state): State<APIAppState>,
     Path((peer_id, method)): Path<(String, String)>,
@@ -321,6 +433,17 @@ async fn api_nearby_connect(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/nearby/{peer_id}/accept",
+    tag = "Nearby",
+    params(
+        ("peer_id" = String, Path, description = "Peer ID"),
+    ),
+    responses(
+        (status = 200, description = "Accepted Nearby connection")
+    )
+)]
 async fn api_nearby_accept(
     State(state): State<APIAppState>,
     Path(peer_id): Path<String>,
@@ -330,6 +453,17 @@ async fn api_nearby_accept(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/nearby/{peer_id}/decline",
+    tag = "Nearby",
+    params(
+        ("peer_id" = String, Path, description = "Peer ID"),
+    ),
+    responses(
+        (status = 200, description = "Declined Nearby connection")
+    )
+)]
 async fn api_nearby_decline(
     State(state): State<APIAppState>,
     Path(peer_id): Path<String>,
@@ -339,6 +473,14 @@ async fn api_nearby_decline(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/contacts",
+    tag = "Contacts",
+    responses(
+        (status = 200, description = "Got contacts", body = Vec<ContactResponse>)
+    )
+)]
 async fn api_contacts(State(state): State<APIAppState>) -> Result<Json<Vec<ContactResponse>>> {
     cmd_wrapper::get_contacts(state)
         .await
@@ -346,6 +488,38 @@ async fn api_contacts(State(state): State<APIAppState>) -> Result<Json<Vec<Conta
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/contact/{contact_id}",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+    ),
+    responses(
+        (status = 200, description = "Fetched contact", body = Option<ContactResponse>)
+    )
+)]
+async fn api_contact_get(
+    State(state): State<APIAppState>,
+    Path(contact_id): Path<String>,
+) -> Result<Json<Option<ContactResponse>>> {
+    cmd_wrapper::get_contact(state, contact_id)
+        .await
+        .map(Json)
+        .map_err(Into::into)
+}
+
+#[utoipa::path(
+    delete,
+    path = "/contact/{contact_id}",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+    ),
+    responses(
+        (status = 200, description = "Removed contact")
+    )
+)]
 async fn api_contact_remove(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -356,11 +530,24 @@ async fn api_contact_remove(
         .map_err(Into::into)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct APIMessageSend {
     text: String,
     reply_to: Option<String>,
 }
+
+#[utoipa::path(
+    post,
+    path = "/messages/{contact_id}",
+    tag = "Messages",
+    request_body = APIMessageSend,
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+    ),
+    responses(
+        (status = 200, description = "Sent message", body = String)
+    )
+)]
 async fn api_messages_send(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -371,6 +558,17 @@ async fn api_messages_send(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/typing/{contact_id}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID")
+    ),
+    responses(
+        (status = 200, description = "Typing indicator sent")
+    )
+)]
 async fn api_typing(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -380,6 +578,18 @@ async fn api_typing(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/messages/{contact_id}/{message_id}/local",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+    ),
+    responses(
+        (status = 200, description = "Deleted message locally")
+    )
+)]
 async fn api_message_delete_local(
     State(state): State<APIAppState>,
     Path((contact_id, message_id)): Path<(String, String)>,
@@ -389,6 +599,18 @@ async fn api_message_delete_local(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/messages/{contact_id}/{message_id}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+    ),
+    responses(
+        (status = 200, description = "Deleted message")
+    )
+)]
 async fn api_message_delete(
     State(state): State<APIAppState>,
     Path((contact_id, message_id)): Path<(String, String)>,
@@ -398,10 +620,24 @@ async fn api_message_delete(
         .map_err(Into::into)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct APIMessageEdit {
     text: String,
 }
+
+#[utoipa::path(
+    patch,
+    path = "/messages/{contact_id}/{message_id}",
+    tag = "Messages",
+    request_body = APIMessageEdit,
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+    ),
+    responses(
+        (status = 200, description = "Edited message")
+    )
+)]
 async fn api_message_edit(
     State(state): State<APIAppState>,
     Path((contact_id, message_id)): Path<(String, String)>,
@@ -417,6 +653,20 @@ struct APIMessagesGet {
     limit: usize,
     before: Option<String>,
 }
+
+#[utoipa::path(
+    get,
+    path = "/messages/{contact_id}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("limit" = usize, Query, description = "Message count"),
+        ("before" = Option<String>, Query, description = "Before a certain message"),
+    ),
+    responses(
+        (status = 200, description = "Sent message", body = Vec<MessageResponse>)
+    )
+)]
 async fn api_messages_get(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -430,6 +680,19 @@ async fn api_messages_get(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/messages/{contact_id}/{message_id}/reactions/{emoji}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+        ("emoji" = String, Path, description = "Emoji"),
+    ),
+    responses(
+        (status = 200, description = "Sent reaction")
+    )
+)]
 async fn api_message_reaction_add(
     State(state): State<APIAppState>,
     Path((contact_id, message_id, emoji)): Path<(String, String, String)>,
@@ -439,6 +702,19 @@ async fn api_message_reaction_add(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/messages/{contact_id}/{message_id}/reactions/{emoji}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("message_id" = String, Path, description = "Message ID"),
+        ("emoji" = String, Path, description = "Emoji"),
+    ),
+    responses(
+        (status = 200, description = "Removed reaction")
+    )
+)]
 async fn api_message_reaction_remove(
     State(state): State<APIAppState>,
     Path((contact_id, message_id, emoji)): Path<(String, String, String)>,
@@ -448,6 +724,17 @@ async fn api_message_reaction_remove(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/contact/{contact_id}/security_code",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+    ),
+    responses(
+        (status = 200, description = "Got security code")
+    )
+)]
 async fn api_contact_security_code(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -457,6 +744,17 @@ async fn api_contact_security_code(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/contact/{contact_id}/security_code",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+    ),
+    responses(
+        (status = 200, description = "Validated security code")
+    )
+)]
 async fn api_contact_security_code_confirm(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -466,6 +764,14 @@ async fn api_contact_security_code_confirm(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/contact/{contact_id}/block",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Blocked contact")
+    )
+)]
 async fn api_contact_block(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -475,6 +781,14 @@ async fn api_contact_block(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/contact/{contact_id}/unblock",
+    tag = "Contacts",
+    params(
+        ("contact_id" = String, Path, description = "Unblocked contact")
+    )
+)]
 async fn api_contact_unblock(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -484,6 +798,14 @@ async fn api_contact_unblock(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/contacts/blocked",
+    tag = "Contacts",
+    responses(
+        (status = 200, description = "Listed blocked contacts", body = Vec<ContactResponse>)
+    )
+)]
 async fn api_contact_blocked_list(
     State(state): State<APIAppState>,
 ) -> Result<Json<Vec<ContactResponse>>> {
@@ -493,34 +815,74 @@ async fn api_contact_blocked_list(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    delete,
+    path = "/self_peer_id",
+    tag = "Self",
+    responses(
+        (status = 200, description = "Peer ID rotated")
+    )
+)]
 async fn api_self_rotate_peer_id(State(state): State<APIAppState>) -> Result<()> {
     cmd_wrapper::rotate_peer_id(state).await.map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/self/peer_id",
+    tag = "Self",
+    responses(
+        (status = 200, description = "Peer ID", body = String)
+    )
+)]
 async fn api_self_get_peer_id(State(state): State<APIAppState>) -> Result<String> {
     cmd_wrapper::get_local_peer_id(state)
         .await
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    get,
+    path = "/self/user_id",
+    tag = "Self",
+    responses(
+        (status = 200, description = "User ID", body = String)
+    )
+)]
 async fn api_self_get_user_id(State(state): State<APIAppState>) -> Result<String> {
     cmd_wrapper::get_local_user_id_hex(state)
         .await
         .map_err(Into::into)
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 struct APISelfProfile {
     username: String,
     avatar: Option<Vec<u8>>,
 }
-async fn api_self_get_profile(State(state): State<APIAppState>) -> Result<Json<APISelfProfile>> {
-    cmd_wrapper::get_local_user_profile(state)
-        .await
-        .map(|(username, avatar)| Json(APISelfProfile { username, avatar }))
-        .map_err(Into::into)
+
+#[utoipa::path(
+    get,
+    path = "/self/profile",
+    tag = "Self",
+    responses(
+        (status = 200, description = "User profile", body = APISelfProfile)
+    )
+)]
+async fn api_self_get_profile(State(state): State<APIAppState>) -> Json<APISelfProfile> {
+    let (username, avatar) = cmd_wrapper::get_local_user_profile(state).await;
+    Json(APISelfProfile { username, avatar })
 }
 
+#[utoipa::path(
+    post,
+    path = "/self/profile",
+    tag = "Self",
+    request_body = APISelfProfile,
+    responses(
+        (status = 200, description = "Profile updated")
+    )
+)]
 async fn api_self_post_profile(
     State(state): State<APIAppState>,
     Json(APISelfProfile { username, avatar }): Json<APISelfProfile>,
@@ -530,6 +892,15 @@ async fn api_self_post_profile(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/contact/{contact_id}/profile",
+    tag = "Contacts",
+    request_body = APISelfProfile,
+    responses(
+        (status = 200, description = "Shared profile")
+    )
+)]
 async fn api_contact_share_profile(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -540,16 +911,28 @@ async fn api_contact_share_profile(
         .map_err(Into::into)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct APIFile {
     path: String,
 }
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 struct APIFileDetails {
     name: String,
     size: u64,
 }
 
+#[utoipa::path(
+    post,
+    path = "/files/{contact_id}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID")
+    ),
+    request_body = APIFile,
+    responses(
+        (status = 200, description = "Sent file", body = APIFileDetails)
+    )
+)]
 async fn api_files_send(
     State(state): State<APIAppState>,
     Path(contact_id): Path<String>,
@@ -561,6 +944,19 @@ async fn api_files_send(
         .map_err(Into::into)
 }
 
+#[utoipa::path(
+    post,
+    path = "/files/{contact_id}/{offer_id}",
+    tag = "Messages",
+    params(
+        ("contact_id" = String, Path, description = "Contact ID"),
+        ("offer_id" = String, Path, description = "Offer ID"),
+    ),
+    request_body = APIFile,
+    responses(
+        (status = 200, description = "Accepted file")
+    )
+)]
 async fn api_files_accept(
     State(state): State<APIAppState>,
     Path((contact_id, offer_id)): Path<(String, String)>,

@@ -25,6 +25,7 @@ pub mod deep_link;
 pub mod dirs;
 pub mod error;
 pub mod file;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod window_menu;
 
 #[derive(Parser, Default)]
@@ -92,6 +93,7 @@ pub fn run() {
         builder = builder
             .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_autostart::Builder::new().build())
+            .plugin(tauri_plugin_notification::init())
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 let _ = app
                     .get_webview_window("main")
@@ -106,7 +108,6 @@ pub fn run() {
     }
 
     builder
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -274,9 +275,7 @@ pub fn run() {
 
                         interval.tick().await;
 
-                        let enabled = get_updater_enabled(&*db_clone.0.lock().await).unwrap_or(true);
-
-                        if enabled {
+                        if get_updater_enabled(&*db_clone.0.lock().await) {
                             let _ = check_for_updates_impl(handle.clone(), false).await;
                         }
                     }
@@ -336,6 +335,7 @@ pub fn run() {
             commands::connect_nearby,
             commands::accept_nearby,
             commands::decline_nearby,
+            commands::get_contact,
             commands::get_contacts,
             commands::remove_contact,
             commands::send_text,

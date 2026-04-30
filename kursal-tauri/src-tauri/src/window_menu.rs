@@ -71,10 +71,12 @@ pub fn setup(app: &mut tauri::App) -> Result<(), tauri::Error> {
 
     app.on_menu_event(move |app_handle, event| match event.id().0.as_str() {
         "dev_tools" => {
-            if let Some(window) = app_handle.get_webview_window("main")
-                && !window.is_devtools_open()
-            {
-                window.open_devtools();
+            if let Some(window) = app_handle.get_webview_window("main") {
+                if window.is_devtools_open() {
+                    window.close_devtools();
+                } else {
+                    window.open_devtools();
+                }
             }
         }
         "settings" => {

@@ -12,6 +12,7 @@ use libsignal_protocol::{DeviceId, ProtocolAddress};
 use rand::{Rng, TryRngCore, distr::Uniform, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
@@ -19,7 +20,7 @@ pub mod bluetooth;
 pub mod mdns;
 
 #[allow(non_camel_case_types)]
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug, ToSchema)]
 pub enum NearbyOrigin {
     Bluetooth,
     mDNS,

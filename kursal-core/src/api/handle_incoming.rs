@@ -1,9 +1,3 @@
-use futures::AsyncReadExt;
-use libp2p::PeerId;
-use libsignal_protocol::{DeviceId, ProtocolAddress};
-use tokio::{fs::create_dir_all, sync::mpsc};
-use zeroize::Zeroize;
-
 use crate::{
     KursalError, Result,
     api::{
@@ -33,6 +27,11 @@ use crate::{
         get_auto_accept_config, get_auto_download_config, get_timestamp_secs,
     },
 };
+use futures::AsyncReadExt;
+use libp2p::PeerId;
+use libsignal_protocol::{DeviceId, ProtocolAddress};
+use tokio::{fs::create_dir_all, sync::mpsc};
+use zeroize::Zeroize;
 
 pub async fn handle_incoming(
     from: PeerId,
@@ -63,8 +62,8 @@ pub async fn handle_incoming(
                 return Ok(());
             }
 
-            let all_contacts = Contact::load_all(&*db.clone().0.lock().await)?;
-            let mut contact = all_contacts
+            // not the best way of fetching the contact by peer id
+            let mut contact = Contact::load_all(&*db.clone().0.lock().await)?
                 .into_iter()
                 .find(|c| c.peer_id == rotation.old_peer_id)
                 .ok_or_else(|| KursalError::Identity("unknown peer".to_string()))?;
@@ -113,13 +112,14 @@ pub async fn handle_incoming(
             return Ok(());
         }
         Ok(WireMessage::FileTransfer(chunk)) => {
+            // not the best way of fetching the contact by peer id
             let contact = Contact::load_all(&*db.clone().0.lock().await)?
                 .into_iter()
                 .find(|c| c.peer_id == peer_id_str)
                 .ok_or_else(|| KursalError::Identity("unknown peer".to_string()))?;
 
             if contact.blocked {
-                return Err(KursalError::Identity("blocked peer".to_string()));
+                return Ok(()); // ignore
             }
 
             let key = format!(
@@ -205,13 +205,14 @@ pub async fn handle_incoming(
         }
     };
 
+    // not the best way of fetching the contact by peer id + this is litteraly fetching another time...
     let mut contact = Contact::load_all(&*db.clone().0.lock().await)?
         .into_iter()
         .find(|c| c.peer_id == peer_id_str)
         .ok_or_else(|| KursalError::Identity("unknown peer".to_string()))?;
 
     if contact.blocked {
-        return Err(KursalError::Identity("blocked peer".to_string()));
+        return Ok(()); // ignore
     }
 
     let address = ProtocolAddress::new(hex::encode(contact.user_id.0), DeviceId::new(1u8).unwrap());
@@ -410,47 +411,34 @@ pub async fn handle_incoming(
             let mut autodownload = None;
             let auto_accept = get_auto_accept_config(&*db.0.lock().await);
 
-            if let Ok(auto_accept) = auto_accept
-                && auto_accept.size_cap_bytes >= size_bytes
+            if auto_accept.size_cap_bytes >= size_bytes
                 && ((auto_accept.mode == "verified" && contact.verified)
                     || auto_accept.mode == "all")
             {
                 let auto_config = get_auto_download_config(&*db.0.lock().await);
-                match auto_config {
-                    Ok(auto_config) => {
-                        let contact_hex = hex::encode(contact.user_id.0);
 
-                        let size = if auto_config.scope == "all_contacts" {
-                            get_auto_download_storage(cache_dir.to_path_buf())
-                        } else {
-                            get_auto_download_storage_for(
-                                cache_dir.to_path_buf(),
-                                contact_hex.clone(),
-                            )
-                        };
+                let contact_hex = hex::encode(contact.user_id.0);
 
-                        match size {
-                            Ok(size) => {
-                                if size.saturating_add(size_bytes) <= auto_config.limit_bytes {
-                                    let root = cache_dir.join("files").join(contact_hex);
-                                    create_dir_all(&root).await.map_err(KursalError::Io)?;
+                let size = if auto_config.scope == "all_contacts" {
+                    get_auto_download_storage(cache_dir.to_path_buf())
+                } else {
+                    get_auto_download_storage_for(cache_dir.to_path_buf(), contact_hex.clone())
+                };
 
-                                    let path = root.join(format!(
-                                        "{}-{}",
-                                        hex::encode(offer_id.0),
-                                        filename
-                                    ));
+                match size {
+                    Ok(size) => {
+                        if size.saturating_add(size_bytes) <= auto_config.limit_bytes {
+                            let root = cache_dir.join("files").join(contact_hex);
+                            create_dir_all(&root).await.map_err(KursalError::Io)?;
 
-                                    autodownload = Some(path.to_string_lossy().into_owned());
-                                }
-                            }
-                            Err(err) => {
-                                log::error!("Could not get auto download folder size: {err}");
-                            }
+                            let path =
+                                root.join(format!("{}-{}", hex::encode(offer_id.0), filename));
+
+                            autodownload = Some(path.to_string_lossy().into_owned());
                         }
                     }
                     Err(err) => {
-                        log::error!("Could not auto download: {err}");
+                        log::error!("Could not get auto download folder size: {err}");
                     }
                 }
             }

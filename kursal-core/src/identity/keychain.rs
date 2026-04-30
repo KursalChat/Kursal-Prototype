@@ -24,7 +24,7 @@ pub fn init_keychain() -> Result<()> {
 
     #[cfg(target_os = "macos")]
     {
-        use apple_native_keyring_store::keychain::Store;
+        use apple_native_keyring_store::keychain::Store; // TODO: maybe change to protected
         set_default_store(
             Store::new_with_configuration(config)
                 .map_err(|err| KursalError::Storage(err.to_string()))?,
@@ -36,7 +36,7 @@ pub fn init_keychain() -> Result<()> {
         use apple_native_keyring_store::protected::Store;
         set_default_store(
             Store::new_with_configuration(config)
-                .map_err(|err| KursalError::Storage(err.to_string())),
+                .map_err(|err| KursalError::Storage(err.to_string()))?,
         );
     }
 
