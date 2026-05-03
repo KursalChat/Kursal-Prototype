@@ -1,8 +1,5 @@
 <script lang="ts">
-  const LINE_1 = "Your message goes straight to them.";
-  const LINE_2 = "Encrypted before it leaves your device.";
-  const LINE_3 = "Only they can read it.";
-  const BUTTON_LABEL = "Next";
+  import { t } from '$lib/i18n';
 
   const PLAIN_TEXT = "hi there 👋";
   const CIPHER_GLYPHS = [
@@ -471,7 +468,7 @@
   <div class="text-block">
     <div class="line large" class:show={showLine1}>
       {#if showLine1}
-        {#each chars(LINE_1) as { ch, delay }}
+        {#each chars(t('onboarding.screen3.line1')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -481,7 +478,7 @@
 
     <div class="line" class:show={showLine2}>
       {#if showLine2}
-        {#each chars(LINE_2) as { ch, delay }}
+        {#each chars(t('onboarding.screen3.line2')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -491,7 +488,7 @@
 
     <div class="line accent" class:show={showLine3}>
       {#if showLine3}
-        {#each chars(LINE_3) as { ch, delay }}
+        {#each chars(t('onboarding.screen3.line3')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -502,7 +499,7 @@
 
   <div class="actions" class:show={showButton}>
     <button class="next" onclick={onNext} tabindex={showButton ? 0 : -1}>
-      <span>{BUTTON_LABEL}</span>
+      <span>{t('onboarding.screen3.cta')}</span>
       <svg
         width="18"
         height="18"

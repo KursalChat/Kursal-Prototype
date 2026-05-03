@@ -1,6 +1,7 @@
 <script lang="ts">
   import { CloudUpload } from "lucide-svelte";
   import Spinner from "$lib/components/Spinner.svelte";
+  import { t } from "$lib/i18n";
 
   interface Props {
     count: number;
@@ -17,8 +18,8 @@
     class:busy={flushing}
     onclick={onFlush}
     disabled={flushing}
-    aria-label="Send all queued messages"
-    title="Send all queued messages now"
+    aria-label={t('chat.offlineQueue.sendAllAriaLabel')}
+    title={t('chat.offlineQueue.sendAllTitle')}
   >
     <span class="icon">
       {#if flushing}
@@ -28,7 +29,7 @@
       {/if}
     </span>
     <span class="count">{count}</span>
-    <span class="label">{flushing ? "Sending…" : "Send queued"}</span>
+    <span class="label">{flushing ? t('chat.offlineQueue.sending') : t('chat.offlineQueue.sendQueued')}</span>
   </button>
 {/if}
 
@@ -38,21 +39,23 @@
     align-items: center;
     gap: 8px;
     align-self: center;
-    margin: 0 auto 8px;
+    margin: 0 auto;
     padding: 6px 14px;
-    background: var(--accent-dim);
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     color: var(--accent-hover);
-    border: 1px solid rgba(129, 140, 248, 0.35);
+    border: 1px solid var(--border-light);
     border-radius: 999px;
     font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
-    transition: all var(--transition);
-    animation: slideUp 0.18s ease-out;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
+    transition: transform var(--transition), background var(--transition);
+    animation: slideUp 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.10);
   }
   .queue-bar:hover:not(:disabled) {
-    background: rgba(129, 140, 248, 0.22);
+    background: var(--bg-hover);
     transform: translateY(-1px);
   }
   .queue-bar:active:not(:disabled) {

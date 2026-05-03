@@ -50,5 +50,8 @@
 
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Kursal uses Bluetooth to discover nearby devices</string>
+
+	<key>NSFaceIDUsageDescription</key>
+    <string>Authenticate with biometric to unlock the app</string>
 </dict>
 </plist>

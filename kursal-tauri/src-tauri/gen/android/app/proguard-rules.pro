@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+-keep class chat.kursal.BleAdvertiser { *; }
+-keepclassmembers class chat.kursal.BleAdvertiser {
+    public static *** start(android.content.Context, java.lang.String, java.lang.String, java.lang.String);
+    public static *** stop(android.content.Context);
+    public static native ** nativeOnReadRequest();
+    public static native ** nativeOnWriteRequest(java.lang.String, byte[]);
+}

@@ -1,8 +1,5 @@
 <script lang="ts">
-  const TEXT_LINE_1 = "Today, your messages are not yours.";
-  const TEXT_LINE_2 = "Stored. Scanned. Sold.";
-  const TEXT_FINAL = "You don't own what you say anymore.";
-  const TEXT_BUTTON = "Discover Kursal";
+  import { t } from '$lib/i18n';
 
   type Props = {
     onNext: () => void;
@@ -607,7 +604,7 @@
   <div class="text-block">
     <div class="line large" class:show={showLine1}>
       {#if showLine1}
-        {#each charReveal(TEXT_LINE_1) as { ch, delay }}
+        {#each charReveal(t('onboarding.screen2.line1')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -617,7 +614,7 @@
 
     <div class="line" class:show={showLine2}>
       {#if showLine2}
-        {#each charReveal(TEXT_LINE_2) as { ch, delay }}
+        {#each charReveal(t('onboarding.screen2.line2')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -627,7 +624,7 @@
 
     <div class="line final" class:show={showFinal}>
       {#if showFinal}
-        {#each charReveal(TEXT_FINAL) as { ch, delay }}
+        {#each charReveal(t('onboarding.screen2.line3')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay * 1.8}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -638,7 +635,7 @@
 
   <div class="actions" class:show={showButtons}>
     <button class="next" onclick={onNext} tabindex={showButtons ? 0 : -1}>
-      <span>{TEXT_BUTTON}</span>
+      <span>{t('onboarding.screen2.cta')}</span>
       <svg
         width="18"
         height="18"

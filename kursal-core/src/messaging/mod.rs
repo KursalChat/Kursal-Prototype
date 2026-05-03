@@ -86,6 +86,7 @@ impl StoredMessage {
             .map(|(_, bytes)| {
                 bincode::deserialize(&bytes).map_err(|err| KursalError::Storage(err.to_string()))
             })
+            .rev()
             .collect::<Result<_>>()?;
 
         msgs.reverse();

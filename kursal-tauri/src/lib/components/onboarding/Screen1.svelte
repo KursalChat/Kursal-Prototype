@@ -1,7 +1,5 @@
 <script lang="ts">
-  const primaryText = "Hi. I'm Winston.";
-  const subtitleText = "And I believe privacy is fundamental.";
-
+  import { t } from '$lib/i18n';
   import Winston from "./Winston.svelte";
 
   type Props = {
@@ -43,7 +41,7 @@
     <div class="text-block">
       {#if showPrimary}
         <h1 class="primary">
-          {#each primaryText.split("") as ch, i}
+          {#each t('onboarding.screen1.heading').split("") as ch, i}
             <span class="char" style="animation-delay: {i * 55}ms"
               >{ch === " " ? "\u00A0" : ch}</span
             >
@@ -53,7 +51,7 @@
 
       {#if showSubtitle}
         <p class="subtitle">
-          {#each subtitleText.split("") as ch, i}
+          {#each t('onboarding.screen1.subtitle').split("") as ch, i}
             <span class="char" style="animation-delay: {i * 30}ms"
               >{ch === " " ? "\u00A0" : ch}</span
             >
@@ -71,7 +69,7 @@
       tabindex={showNext ? 0 : -1}
       aria-hidden={!showNext}
     >
-      <span>Continue</span>
+      <span>{t('onboarding.screen1.continue')}</span>
       <svg
         width="18"
         height="18"
@@ -85,10 +83,10 @@
     </button>
 
     <div class="skip-wrap" class:show={showSkip} aria-hidden={!showSkip}>
-      <button class="skip" onclick={onSkip} tabindex={showSkip ? 0 : -1}>
-        I know what I'm doing
+      <button class="skip" onclick={onSkip} tabindex={showSkip ? 0 : -1} aria-label={t('onboarding.screen1.skip')}>
+        {t('onboarding.screen1.skip')}
       </button>
-      <div class="tooltip">you probably don't! follow the guide :p</div>
+      <div class="tooltip">{t('onboarding.screen1.skipTooltip')}</div>
     </div>
   </div>
 </div>

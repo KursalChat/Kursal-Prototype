@@ -29,6 +29,15 @@
     "core:window:default",
     "core:window:allow-start-dragging",
     {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://*" },
+        { "url": "http://*" },
+        { "url": "mailto:*" },
+        { "url": "tel:*" }
+      ]
+    },
+    {
       "identifier": "opener:allow-open-path",
       "allow": [
         { "path": "$APPCACHE/**" },

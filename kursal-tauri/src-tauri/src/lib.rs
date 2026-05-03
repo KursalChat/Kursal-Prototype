@@ -18,6 +18,8 @@ use tauri::{Manager, async_runtime::block_on};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tokio::sync::{Mutex, broadcast, mpsc};
 
+#[cfg(target_os = "android")]
+pub mod android_ble;
 pub mod benchmark;
 pub mod commands;
 pub mod core_event;
@@ -70,30 +72,24 @@ pub fn run() {
         },
     }
 
-    #[cfg(dev)]
-    let mut builder = tauri::Builder::default();
-
-    #[cfg(not(dev))]
     let mut builder = tauri::Builder::default();
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
-        builder = builder
-            .plugin(tauri_plugin_updater::Builder::new().build())
-            .on_window_event(|window, event| {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    window.hide().unwrap();
-                }
-            });
+        builder = builder.on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                window.hide().unwrap();
+            }
+        });
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios", dev)))]
     {
         builder = builder
             .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_autostart::Builder::new().build())
-            .plugin(tauri_plugin_notification::init())
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
                 let _ = app
                     .get_webview_window("main")
@@ -104,10 +100,14 @@ pub fn run() {
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        builder = builder.plugin(tauri_plugin_barcode_scanner::init());
+        builder = builder
+            .plugin(tauri_plugin_haptics::init())
+            .plugin(tauri_plugin_barcode_scanner::init())
+            .plugin(tauri_plugin_biometric::init());
     }
 
     builder
+    .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())

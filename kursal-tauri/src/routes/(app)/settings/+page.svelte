@@ -1,5 +1,6 @@
 <script lang="ts">
   import { User, Palette, ShieldCheck, Wifi, HardDrive, Zap } from "lucide-svelte";
+  import { t } from "$lib/i18n";
   import AccountSection from "$lib/components/settings/AccountSection.svelte";
   import AppearanceSection from "$lib/components/settings/AppearanceSection.svelte";
   import PrivacySection from "$lib/components/settings/PrivacySection.svelte";
@@ -23,23 +24,23 @@
     bodyEl?.scrollTo({ top: 0, behavior: "instant" });
   });
 
-  const categories = [
-    { id: "account" as const, label: "Account", icon: User },
-    { id: "appearance" as const, label: "Appearance", icon: Palette },
-    { id: "privacy" as const, label: "Privacy & Security", icon: ShieldCheck },
-    { id: "network" as const, label: "Network", icon: Wifi },
-    { id: "storage" as const, label: "Storage", icon: HardDrive },
-    { id: "advanced" as const, label: "Advanced", icon: Zap },
-  ];
+  const categories = $derived([
+    { id: "account" as const, label: t('settings.categories.account'), icon: User },
+    { id: "appearance" as const, label: t('settings.categories.appearance'), icon: Palette },
+    { id: "privacy" as const, label: t('settings.categories.privacy'), icon: ShieldCheck },
+    { id: "network" as const, label: t('settings.categories.network'), icon: Wifi },
+    { id: "storage" as const, label: t('settings.categories.storage'), icon: HardDrive },
+    { id: "advanced" as const, label: t('settings.categories.advanced'), icon: Zap },
+  ]);
 </script>
 
 <div class="settings">
   <header class="settings-header" data-tauri-drag-region>
-    <h2>Settings</h2>
+    <h2>{t('settings.heading')}</h2>
   </header>
 
   <div class="settings-layout">
-    <nav class="sidenav" aria-label="Settings categories">
+    <nav class="sidenav" aria-label={t('settings.categoriesAriaLabel')}>
       {#each categories as cat}
         <button
           class="nav-item"
@@ -130,6 +131,16 @@
     color: var(--text-secondary);
     text-align: left;
     transition: background var(--transition), color var(--transition);
+    min-width: 0;
+  }
+  .nav-item :global(svg) {
+    flex-shrink: 0;
+  }
+  .nav-item span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .nav-item:hover {

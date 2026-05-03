@@ -1,20 +1,66 @@
-import { marked } from "marked";
+import { marked, type Tokens } from "marked";
 import DOMPurify from "dompurify";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { confirm } from "@tauri-apps/plugin-dialog";
 import { notifications } from "$lib/state/notifications.svelte";
+import { confirmDialogWithCheckbox } from "$lib/state/confirm.svelte";
+import { trustedDomainsState } from "$lib/state/trustedDomains.svelte";
+import { t } from "$lib/i18n";
+
+marked.use({
+  extensions: [
+    {
+      name: "spoiler",
+      level: "inline",
+      start(src: string) {
+        const i = src.indexOf("||");
+        return i < 0 ? undefined : i;
+      },
+      tokenizer(
+        this: { lexer: { inlineTokens: (s: string) => Tokens.Generic[] } },
+        src: string,
+      ) {
+        const match = /^\|\|([\s\S]+?)\|\|/.exec(src);
+        if (match) {
+          return {
+            type: "spoiler",
+            raw: match[0],
+            tokens: this.lexer.inlineTokens(match[1]),
+          };
+        }
+      },
+      renderer(this: any, token: any) {
+        return `<span class="spoiler" tabindex="0">${this.parser.parseInline(token.tokens)}</span>`;
+      },
+    },
+  ],
+});
 
 export type MediaKind = "image" | "audio" | "video" | "other";
 
 const IMAGE_EXT = new Set([
-  "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "heic", "heif",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "bmp",
+  "svg",
+  "avif",
+  "heic",
+  "heif",
 ]);
 const AUDIO_EXT = new Set([
-  "mp3", "wav", "ogg", "oga", "m4a", "aac", "flac", "opus", "weba",
+  "mp3",
+  "wav",
+  "ogg",
+  "oga",
+  "m4a",
+  "aac",
+  "flac",
+  "opus",
+  "weba",
 ]);
-const VIDEO_EXT = new Set([
-  "mp4", "webm", "mov", "m4v", "ogv", "mkv", "avi",
-]);
+const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v", "ogv", "mkv", "avi"]);
 
 export function mediaKindFromFilename(filename: string): MediaKind {
   const dot = filename.lastIndexOf(".");
@@ -24,6 +70,61 @@ export function mediaKindFromFilename(filename: string): MediaKind {
   if (AUDIO_EXT.has(ext)) return "audio";
   if (VIDEO_EXT.has(ext)) return "video";
   return "other";
+}
+
+export function midTruncate(name: string, maxLen = 30): string {
+  if (name.length <= maxLen) return name;
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 && name.length - dot < 8 ? name.slice(dot) : "";
+  const stem = ext ? name.slice(0, name.length - ext.length) : name;
+  const room = maxLen - ext.length - 1;
+  if (room < 6) return name.slice(0, maxLen - 1) + "…";
+  const head = Math.ceil(room * 0.6);
+  const tail = room - head;
+  return stem.slice(0, head) + "…" + stem.slice(stem.length - tail) + ext;
+}
+
+export function fileTypeColor(filename: string): string {
+  const dot = filename.lastIndexOf(".");
+  if (dot < 0) return "var(--text-muted)";
+  const ext = filename.slice(dot + 1).toLowerCase();
+  if (ext === "pdf") return "#ef4444";
+  if (["doc", "docx", "odt", "rtf"].includes(ext)) return "#3b82f6";
+  if (["xls", "xlsx", "csv", "ods"].includes(ext)) return "#22c55e";
+  if (["ppt", "pptx", "odp", "key"].includes(ext)) return "#f97316";
+  if (["zip", "tar", "gz", "7z", "rar", "bz2", "xz"].includes(ext))
+    return "#a855f7";
+  if (AUDIO_EXT.has(ext)) return "#ec4899";
+  if (VIDEO_EXT.has(ext)) return "#14b8a6";
+  if (IMAGE_EXT.has(ext)) return "#6366f1";
+  if (["txt", "md", "log"].includes(ext)) return "#94a3b8";
+  if (["json", "xml", "yaml", "yml", "toml"].includes(ext)) return "#eab308";
+  if (
+    [
+      "js",
+      "ts",
+      "tsx",
+      "jsx",
+      "rs",
+      "py",
+      "go",
+      "rb",
+      "java",
+      "c",
+      "cpp",
+      "h",
+      "hpp",
+      "cs",
+      "swift",
+      "kt",
+      "php",
+      "html",
+      "css",
+      "scss",
+    ].includes(ext)
+  )
+    return "#0ea5e9";
+  return "var(--text-muted)";
 }
 
 export function formatFileSize(bytes: number): string {
@@ -72,17 +173,12 @@ export function formatGroupTime(ts: number): string {
   );
 }
 
-export function getStatusLabel(s: string | undefined): string {
-  if (!s || s === "disconnected") return "Offline";
-  if (s === "direct") return "Connected";
-  if (s === "holepunch") return "Connected · p2p";
-  if (s === "relay") return "Connected · relay";
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 const markdownCache = new Map<string, string>();
 
-export function renderMarkdown(content: string, isEdited: boolean = false): string {
+export function renderMarkdown(
+  content: string,
+  isEdited: boolean = false,
+): string {
   const cacheKey = content + (isEdited ? "|e" : "|n");
   const cached = markdownCache.get(cacheKey);
   if (cached) return cached;
@@ -105,10 +201,30 @@ export function renderMarkdown(content: string, isEdited: boolean = false): stri
 
   const sanitized = DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
-      "p", "br", "b", "i", "em", "strong", "a", "pre", "code", "blockquote",
-      "ul", "ol", "li", "del", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "span",
+      "p",
+      "br",
+      "b",
+      "i",
+      "em",
+      "strong",
+      "a",
+      "pre",
+      "code",
+      "blockquote",
+      "ul",
+      "ol",
+      "li",
+      "del",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "hr",
+      "span",
     ],
-    ALLOWED_ATTR: ["href", "class", "target", "rel", "style"],
+    ALLOWED_ATTR: ["href", "class", "target", "rel", "style", "tabindex"],
   });
   markdownCache.set(cacheKey, sanitized);
   if (markdownCache.size > 600) {
@@ -118,17 +234,16 @@ export function renderMarkdown(content: string, isEdited: boolean = false): stri
   return sanitized;
 }
 
-const trustedHosts = new Set([
-  "github.com",
-  "docs.rs",
-  "crates.io",
-  "kursal.chat",
-]);
-
 export async function handleMarkdownClick(e: MouseEvent) {
-  const anchor = (e.target as HTMLElement | null)?.closest(
-    "a",
-  ) as HTMLAnchorElement | null;
+  const target = e.target as HTMLElement | null;
+  const spoiler = target?.closest(".spoiler");
+  if (spoiler) {
+    e.preventDefault();
+    e.stopPropagation();
+    spoiler.classList.toggle("revealed");
+    return;
+  }
+  const anchor = target?.closest("a") as HTMLAnchorElement | null;
   if (!anchor) return;
   e.preventDefault();
   e.stopPropagation();
@@ -137,23 +252,31 @@ export async function handleMarkdownClick(e: MouseEvent) {
   try {
     const url = new URL(href, window.location.origin);
     if (!["http:", "https:", "mailto:", "tel:"].includes(url.protocol)) {
-      notifications.push("Unsupported link type", "error");
+      notifications.push(t("chat.bubble.linkConfirm.unsupported"), "error");
       return;
     }
-    if (
-      ["http:", "https:"].includes(url.protocol) &&
-      !trustedHosts.has(url.hostname)
-    ) {
-      const approved = await confirm(
-        `Open external link?\n\n${url.toString()}`,
-        { title: "Open Link", kind: "warning" },
-      );
-      if (!approved) return;
+    const isWeb = url.protocol === "http:" || url.protocol === "https:";
+    if (isWeb && !trustedDomainsState.isTrusted(url.hostname)) {
+      const result = await confirmDialogWithCheckbox({
+        title: t("chat.bubble.linkConfirm.title"),
+        message: t("chat.bubble.linkConfirm.message"),
+        detail: url.toString(),
+        confirmLabel: t("chat.bubble.linkConfirm.open"),
+        cancelLabel: t("chat.bubble.linkConfirm.cancel"),
+        tone: "warning",
+        checkbox: {
+          label: t("chat.bubble.linkConfirm.trustDomain", { host: url.hostname }),
+        },
+      });
+      if (!result.confirmed) return;
+      if (result.checked) trustedDomainsState.trust(url.hostname);
     }
     await openUrl(url.toString());
   } catch (err) {
     notifications.push(
-      `Failed to open link: ${err instanceof Error ? err.message : err}`,
+      t("chat.bubble.linkConfirm.error", {
+        error: err instanceof Error ? err.message : String(err),
+      }),
       "error",
     );
   }

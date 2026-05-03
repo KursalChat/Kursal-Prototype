@@ -28,6 +28,7 @@
   import SettingRow from "./SettingRow.svelte";
   import Toggle from "./Toggle.svelte";
   import TextInput from "./TextInput.svelte";
+  import { t } from '$lib/i18n';
 
   let appVersion = $state("...");
   let checkingForUpdates = $state(false);
@@ -71,7 +72,7 @@
     try {
       await invoke("check_for_updates");
     } catch (e) {
-      notifications.push(`Update check failed: ${e}`, "error");
+      notifications.push(t('settings.advanced.errorUpdateCheck', { error: String(e) }), "error");
     } finally {
       checkingForUpdates = false;
     }
@@ -96,7 +97,7 @@
       await settingsState.setLocalApi(clean);
       api = { ...clean };
       notifications.push(
-        "Local API saved — restart Kursal to apply changes",
+        t('settings.advanced.successApiSaved'),
         "info",
       );
     } catch (e) {
@@ -110,8 +111,8 @@
     generatingToken = true;
     try {
       newToken = await generateLocalApiToken();
-      tokenVisible = true;
-      notifications.push("New token generated — copy it now", "info");
+      tokenVisible = false;
+      notifications.push(t('settings.advanced.successNewToken'), "info");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -128,9 +129,9 @@
     if (!newToken) return;
     try {
       await writeText(newToken);
-      notifications.push("Token copied", "success");
+      notifications.push(t('settings.advanced.successTokenCopied'), "success");
     } catch (e) {
-      notifications.push(`Copy failed: ${e}`, "error");
+      notifications.push(t('settings.advanced.errorCopyFailed', { error: String(e) }), "error");
     }
   }
 
@@ -144,63 +145,63 @@
 </script>
 
 <div class="sec-head">
-  <h2>Advanced</h2>
-  <p>Updates, developer integrations, and diagnostics.</p>
+  <h2>{t('settings.advanced.heading')}</h2>
+  <p>{t('settings.advanced.description')}</p>
 </div>
 
-<SettingCard title="About">
-  <SettingRow title="Version">
+<SettingCard title={t('settings.advanced.aboutCard')}>
+  <SettingRow title={t('settings.advanced.versionRow')}>
     <span class="value">Kursal {appVersion}</span>
   </SettingRow>
-  <SettingRow title="License">
-    <span class="value">AGPL-3.0</span>
+  <SettingRow title={t('settings.advanced.licenseRow')}>
+    <span class="value">{t('settings.advanced.licenseValue')}</span>
   </SettingRow>
 </SettingCard>
 
-<SettingCard title="Updates">
+<SettingCard title={t('settings.advanced.updatesCard')}>
   <SettingRow
-    title="Check for updates"
-    description="Look for a newer version of Kursal now."
+    title={t('settings.advanced.checkUpdatesRow')}
+    description={t('settings.advanced.checkUpdatesDescription')}
   >
     <Button onclick={handleCheckForUpdates} loading={checkingForUpdates}>
-      <RefreshCw size={13} /> Check
+      <RefreshCw size={13} /> {t('settings.advanced.checkButton')}
     </Button>
   </SettingRow>
   <SettingRow
-    title="Auto-updater"
-    description="Install updates automatically when available."
+    title={t('settings.advanced.autoUpdaterRow')}
+    description={t('settings.advanced.autoUpdaterDescription')}
   >
     <Toggle
       checked={autoUpdater}
       onchange={handleAutoUpdater}
-      ariaLabel="Auto-updater"
+      ariaLabel={t('settings.advanced.autoUpdaterAriaLabel')}
     />
   </SettingRow>
 </SettingCard>
 
 <SettingCard
-  title="Local API server"
-  description="Expose a local HTTP server for automation and custom clients. Treat the auth token as a password."
+  title={t('settings.advanced.localApiCard')}
+  description={t('settings.advanced.localApiDescription')}
 >
-  <SettingRow title="Enable" description="Start an HTTP API on this machine.">
+  <SettingRow title={t('settings.advanced.enableRow')} description={t('settings.advanced.enableDescription')}>
     <Toggle
       checked={api.enabled}
       onchange={(v) => (api = { ...api, enabled: v })}
-      ariaLabel="Enable local API"
+      ariaLabel={t('settings.advanced.enableAriaLabel')}
     />
   </SettingRow>
   {#if api.enabled}
     <SettingRow
-      title="Host on network"
-      description="Expose beyond localhost. Anyone on your network can reach it."
+      title={t('settings.advanced.hostOnNetworkRow')}
+      description={t('settings.advanced.hostOnNetworkDescription')}
     >
       <Toggle
         checked={api.hostOnNetwork}
         onchange={(v) => (api = { ...api, hostOnNetwork: v })}
-        ariaLabel="Host on network"
+        ariaLabel={t('settings.advanced.hostOnNetworkAriaLabel')}
       />
     </SettingRow>
-    <SettingRow title="Port">
+    <SettingRow title={t('settings.advanced.portRow')}>
       <TextInput
         type="number"
         min={1}
@@ -211,25 +212,25 @@
       />
     </SettingRow>
     <SettingRow
-      title="Auth token"
-      description="Generate a new token. Old tokens become invalid."
+      title={t('settings.advanced.authTokenRow')}
+      description={t('settings.advanced.authTokenDescription')}
     >
       <Button
         variant="secondary"
         loading={generatingToken}
         onclick={generateToken}
       >
-        <KeyRound size={13} /> New token
+        <KeyRound size={13} /> {t('settings.advanced.newTokenButton')}
       </Button>
     </SettingRow>
     {#if newToken}
       <div class="token-display">
         <div class="token-head">
-          <span class="token-label">New token — shown once</span>
+          <span class="token-label">{t('settings.advanced.tokenLabel')}</span>
           <button
             class="icon-btn"
             onclick={() => (tokenVisible = !tokenVisible)}
-            aria-label="Toggle visibility"
+            aria-label={t('settings.advanced.toggleVisibilityAriaLabel')}
           >
             {#if tokenVisible}<EyeOff size={13} />{:else}<Eye size={13} />{/if}
           </button>
@@ -239,23 +240,23 @@
         </code>
         <div class="token-actions">
           <Button variant="secondary" onclick={copyToken}>
-            <Copy size={13} /> Copy
+            <Copy size={13} /> {t('settings.advanced.copyTokenButton')}
           </Button>
-          <Button variant="secondary" onclick={hideToken}>Dismiss</Button>
+          <Button variant="secondary" onclick={hideToken}>{t('settings.advanced.dismissTokenButton')}</Button>
         </div>
       </div>
     {/if}
   {/if}
   {#snippet footer()}
     <Button onclick={saveApi} loading={apiSaving} disabled={!apiDirty}
-      >Save</Button
+      >{t('settings.advanced.saveButton')}</Button
     >
   {/snippet}
 </SettingCard>
 
 <SettingCard
-  title="Benchmarks"
-  description="Test device cryptographic performance."
+  title={t('settings.advanced.benchmarksCard')}
+  description={t('settings.advanced.benchmarksDescription')}
 >
   <div class="collapser">
     <button
@@ -265,7 +266,7 @@
     >
       <div class="collapse-left">
         <Activity size={14} />
-        <span>OTP hashing</span>
+        <span>{t('settings.advanced.otpHashingLabel')}</span>
       </div>
       <ChevronDown
         size={14}
@@ -277,16 +278,13 @@
     </button>
     {#if benchmarksOpen}
       <div class="collapse-body">
-        <Benchmark
-          name="OTP Hashing"
-          description="Measures Argon2id OTP hashing speed."
-        />
+        <Benchmark />
       </div>
     {/if}
   </div>
 </SettingCard>
 
-<SettingCard title="Credits">
+<SettingCard title={t('settings.advanced.creditsCard')}>
   <ul class="credits">
     <li>
       <div class="credit-name">
@@ -344,14 +342,18 @@
     color: var(--accent);
   }
   .token-value {
+    display: block;
     background: var(--bg-input);
     padding: 10px 12px;
     border-radius: var(--radius-sm);
     font-family: ui-monospace, SFMono-Regular, monospace;
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--text-primary);
-    word-break: break-all;
     border: 1px solid var(--border);
+    white-space: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
   }
   .token-actions {
     display: flex;

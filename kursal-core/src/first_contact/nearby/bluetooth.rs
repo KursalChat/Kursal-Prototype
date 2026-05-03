@@ -41,12 +41,10 @@ const ATT_OVERHEAD: usize = 3;
 const DEFAULT_CHUNK_SIZE: usize = 180;
 const MIN_CHUNK_SIZE: usize = 8;
 const MAX_CHUNK_SIZE: usize = 500;
-#[cfg(not(target_os = "android"))]
 const REASSEMBLY_TTL: Duration = Duration::from_secs(60);
 const PEER_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
 const PEER_WAIT_POLL: Duration = Duration::from_millis(250);
 
-#[cfg(not(target_os = "android"))]
 #[derive(Clone)]
 struct PartialMsg {
     total: usize,
@@ -55,8 +53,7 @@ struct PartialMsg {
     created_at: Instant,
 }
 
-#[cfg(not(target_os = "android"))]
-type ReassemblyMap = Arc<Mutex<HashMap<(String, u64), PartialMsg>>>;
+type ReassemblyMap = Arc<std::sync::Mutex<HashMap<(String, u64), PartialMsg>>>;
 
 #[derive(Serialize, Deserialize)]
 struct BtWireMessage {
@@ -90,7 +87,6 @@ pub struct BTTransport {
     #[cfg(not(target_os = "android"))]
     adv: Arc<Mutex<Option<AdvState>>>,
     scan: Arc<Mutex<Option<ScanState>>>,
-    #[cfg(not(target_os = "android"))]
     reassembly: ReassemblyMap,
 }
 
@@ -109,8 +105,7 @@ impl BTTransport {
             #[cfg(not(target_os = "android"))]
             adv: Arc::new(Mutex::new(None)),
             scan: Arc::new(Mutex::new(None)),
-            #[cfg(not(target_os = "android"))]
-            reassembly: Arc::new(Mutex::new(HashMap::new())),
+            reassembly: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
     }
 }
@@ -140,9 +135,13 @@ impl NearbyTransport for BTTransport {
         }
 
         #[cfg(target_os = "android")]
-        {
-            let _ = beacon;
-            log::info!("[bt] android: discovery-only, no advertising");
+        if let Err(err) = start_advertiser_android(
+            beacon,
+            self.my_beacon.clone(),
+            self.bt_event_tx.clone(),
+            self.reassembly.clone(),
+        ) {
+            log::error!("[bt] android advertiser start: {err}");
         }
     }
 
@@ -166,6 +165,11 @@ impl NearbyTransport for BTTransport {
             } else {
                 state.advertising = false;
             }
+        }
+
+        #[cfg(target_os = "android")]
+        if let Err(err) = stop_advertiser_android() {
+            log::warn!("[bt] android stop advertising: {err}");
         }
 
         let drained = {
@@ -192,7 +196,7 @@ impl NearbyTransport for BTTransport {
         };
         let bytes = bincode::serialize(&wire).map_err(|e| KursalError::Storage(e.to_string()))?;
 
-        let (peripheral, write_char) = wait_for_peer(&self.peers, peer_id).await?;
+        let (peripheral, write_char) = ensure_peer_connected(&self.peers, peer_id).await?;
 
         let mtu = peripheral.mtu() as usize;
         let chunk_size = if mtu > 23 {
@@ -203,26 +207,54 @@ impl NearbyTransport for BTTransport {
         };
 
         let total_chunks = bytes.chunks(chunk_size).count();
-        if total_chunks > u16::MAX as usize {
-            return Err(KursalError::Network(format!(
-                "bt: message too large ({} chunks)",
-                total_chunks
-            )));
-        }
-        let total = total_chunks as u16;
+        let total = u16::try_from(total_chunks).map_err(|_| {
+            KursalError::Network(format!("bt: message too large ({total_chunks} chunks)"))
+        })?;
         let msg_id: u64 = rand::random();
 
         for (i, chunk) in bytes.chunks(chunk_size).enumerate() {
+            // Safe: i < total_chunks <= u16::MAX (verified by try_from above).
+            let seq = u16::try_from(i).expect("seq fits in u16");
             let mut frame = Vec::with_capacity(FRAG_HEADER_LEN + chunk.len());
             frame.extend_from_slice(&msg_id.to_be_bytes());
-            frame.extend_from_slice(&(i as u16).to_be_bytes());
+            frame.extend_from_slice(&seq.to_be_bytes());
             frame.extend_from_slice(&total.to_be_bytes());
             frame.extend_from_slice(chunk);
 
-            peripheral
+            if let Err(e) = peripheral
                 .write(&write_char, &frame, WriteType::WithResponse)
                 .await
-                .map_err(|e| KursalError::Network(e.to_string()))?;
+            {
+                log::warn!("[bt] write to {peer_id} failed: {e}, attempting reconnect");
+                let bt_err = |e: btleplug::Error| KursalError::Network(e.to_string());
+                let _ = peripheral.disconnect().await;
+                {
+                    let mut guard = self.peers.lock().await;
+                    guard.remove(peer_id);
+                }
+                peripheral.connect().await.map_err(bt_err)?;
+                peripheral.discover_services().await.map_err(bt_err)?;
+                let chars = peripheral.characteristics();
+                let new_char = chars
+                    .iter()
+                    .find(|c| c.uuid == CHAR_UUID)
+                    .ok_or_else(|| KursalError::Network("bt: kursal char missing".into()))?
+                    .clone();
+                {
+                    let mut guard = self.peers.lock().await;
+                    guard.insert(
+                        peer_id.to_string(),
+                        BtPeer {
+                            peripheral: peripheral.clone(),
+                            write_char: new_char.clone(),
+                        },
+                    );
+                }
+                peripheral
+                    .write(&new_char, &frame, WriteType::WithResponse)
+                    .await
+                    .map_err(|e| KursalError::Network(e.to_string()))?;
+            }
         }
 
         Ok(())
@@ -244,16 +276,18 @@ impl NearbyTransport for BTTransport {
     }
 }
 
-async fn wait_for_peer(
+async fn ensure_peer_connected(
     peers: &Arc<Mutex<HashMap<String, BtPeer>>>,
     peer_id: &str,
 ) -> Result<(PlatformPeripheral, Characteristic)> {
+    let bt_err = |e: btleplug::Error| KursalError::Network(e.to_string());
+
     let start = Instant::now();
-    loop {
+    let (peripheral, write_char) = loop {
         {
             let guard = peers.lock().await;
             if let Some(peer) = guard.get(peer_id) {
-                return Ok((peer.peripheral.clone(), peer.write_char.clone()));
+                break (peer.peripheral.clone(), peer.write_char.clone());
             }
         }
         if start.elapsed() >= PEER_WAIT_TIMEOUT {
@@ -262,6 +296,33 @@ async fn wait_for_peer(
             )));
         }
         tokio::time::sleep(PEER_WAIT_POLL).await;
+    };
+
+    match peripheral.is_connected().await {
+        Ok(true) => Ok((peripheral, write_char)),
+        Ok(false) => {
+            log::info!("[bt] peer {peer_id} disconnected, reconnecting");
+            peripheral.connect().await.map_err(bt_err)?;
+            peripheral.discover_services().await.map_err(bt_err)?;
+            let chars = peripheral.characteristics();
+            let new_char = chars
+                .iter()
+                .find(|c| c.uuid == CHAR_UUID)
+                .ok_or_else(|| KursalError::Network("bt: kursal char missing".into()))?
+                .clone();
+            {
+                let mut guard = peers.lock().await;
+                guard.insert(
+                    peer_id.to_string(),
+                    BtPeer {
+                        peripheral: peripheral.clone(),
+                        write_char: new_char.clone(),
+                    },
+                );
+            }
+            Ok((peripheral, new_char))
+        }
+        Err(err) => Err(KursalError::Network(err.to_string())),
     }
 }
 
@@ -347,6 +408,13 @@ async fn run_scanner_events(
     while let Some(event) = events.next().await {
         let id = match event {
             CentralEvent::DeviceDiscovered(id) | CentralEvent::DeviceUpdated(id) => id,
+            CentralEvent::DeviceDisconnected(id) => {
+                let bt_id = id.to_string();
+                remove_peer_by_bt_id(&peers, &bt_id).await;
+                inflight.lock().await.remove(&bt_id);
+                log::info!("[bt] device disconnected {bt_id}, cleared peer");
+                continue;
+            }
             _ => continue,
         };
         let bt_id = id.to_string();
@@ -386,6 +454,11 @@ async fn peers_contains_bt_id(peers: &Arc<Mutex<HashMap<String, BtPeer>>>, bt_id
     guard
         .values()
         .any(|p| p.peripheral.id().to_string() == bt_id)
+}
+
+async fn remove_peer_by_bt_id(peers: &Arc<Mutex<HashMap<String, BtPeer>>>, bt_id: &str) {
+    let mut guard = peers.lock().await;
+    guard.retain(|_, p| p.peripheral.id().to_string() != bt_id);
 }
 
 async fn handshake_with_peer(
@@ -579,7 +652,7 @@ async fn handle_peripheral_event(
                 response: RequestResponse::Success,
             });
 
-            if let Some(bytes) = push_fragment(reassembly, &request.client, &value).await {
+            if let Some(bytes) = push_fragment(reassembly, &request.client, &value) {
                 match bincode::deserialize::<BtWireMessage>(&bytes) {
                     Ok(wire) => {
                         let _ = bt_event_tx
@@ -598,8 +671,7 @@ async fn handle_peripheral_event(
     }
 }
 
-#[cfg(not(target_os = "android"))]
-async fn push_fragment(reassembly: &ReassemblyMap, client: &str, frame: &[u8]) -> Option<Vec<u8>> {
+fn push_fragment(reassembly: &ReassemblyMap, client: &str, frame: &[u8]) -> Option<Vec<u8>> {
     if frame.len() < FRAG_HEADER_LEN {
         log::warn!("[bt] fragment shorter than header ({} bytes)", frame.len());
         return None;
@@ -614,7 +686,10 @@ async fn push_fragment(reassembly: &ReassemblyMap, client: &str, frame: &[u8]) -
         return None;
     }
 
-    let mut map = reassembly.lock().await;
+    let mut map = match reassembly.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
 
     let now = Instant::now();
     map.retain(|_, v| now.duration_since(v.created_at) < REASSEMBLY_TTL);
@@ -649,4 +724,191 @@ async fn push_fragment(reassembly: &ReassemblyMap, client: &str, frame: &[u8]) -
         out.extend(frag?);
     }
     Some(out)
+}
+
+#[cfg(target_os = "android")]
+struct AndroidAdvState {
+    my_beacon: Arc<Mutex<Option<NearbyBeacon>>>,
+    bt_event_tx: mpsc::Sender<BtEvent>,
+    reassembly: ReassemblyMap,
+}
+
+#[cfg(target_os = "android")]
+static ANDROID_STATE: std::sync::Mutex<Option<AndroidAdvState>> = std::sync::Mutex::new(None);
+
+#[cfg(target_os = "android")]
+fn jvm_err<E: std::fmt::Debug>(env: &jni::JNIEnv, prefix: &str, e: E) -> KursalError {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_describe();
+        let _ = env.exception_clear();
+    }
+    KursalError::Network(format!("{prefix}: {e:?}"))
+}
+
+#[cfg(target_os = "android")]
+fn android_state_lock<R>(f: impl FnOnce(&mut Option<AndroidAdvState>) -> R) -> R {
+    let mut g = match ANDROID_STATE.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    f(&mut g)
+}
+
+#[cfg(target_os = "android")]
+fn start_advertiser_android(
+    beacon: NearbyBeacon,
+    my_beacon: Arc<Mutex<Option<NearbyBeacon>>>,
+    bt_event_tx: mpsc::Sender<BtEvent>,
+    reassembly: ReassemblyMap,
+) -> Result<()> {
+    android_state_lock(|s| {
+        *s = Some(AndroidAdvState {
+            my_beacon,
+            bt_event_tx,
+            reassembly,
+        });
+    });
+
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
+        .map_err(|e| KursalError::Network(format!("JNI vm: {e:?}")))?;
+    let env = vm
+        .attach_current_thread()
+        .map_err(|e| KursalError::Network(format!("JNI attach: {e:?}")))?;
+
+    let cls = load_kursal_class(&env, "chat.kursal.BleAdvertiser")?;
+    let app_ctx: jni::objects::JObject = (ctx.context() as jni::sys::jobject).into();
+
+    let svc_uuid_jstr = env
+        .new_string(SERVICE_UUID.to_string())
+        .map_err(|e| jvm_err(&env, "uuid jstring", e))?;
+    let char_uuid_jstr = env
+        .new_string(CHAR_UUID.to_string())
+        .map_err(|e| jvm_err(&env, "char uuid jstring", e))?;
+    let name_jstr = env
+        .new_string(beacon.session_name.clone())
+        .map_err(|e| jvm_err(&env, "name jstring", e))?;
+
+    let res = env
+        .call_static_method(
+            cls,
+            "start",
+            "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z",
+            &[
+                jni::objects::JValue::Object(app_ctx),
+                jni::objects::JValue::Object(svc_uuid_jstr.into()),
+                jni::objects::JValue::Object(char_uuid_jstr.into()),
+                jni::objects::JValue::Object(name_jstr.into()),
+            ],
+        )
+        .map_err(|e| jvm_err(&env, "BleAdvertiser.start", e))?;
+
+    let ok = res
+        .z()
+        .map_err(|e| KursalError::Network(format!("bool ret: {e:?}")))?;
+    if !ok {
+        return Err(KursalError::Network(
+            "BleAdvertiser.start returned false".into(),
+        ));
+    }
+    log::info!("[bt] android advertising as {:?}", beacon.session_name);
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+fn stop_advertiser_android() -> Result<()> {
+    let ctx = ndk_context::android_context();
+    let vm = unsafe { jni::JavaVM::from_raw(ctx.vm().cast()) }
+        .map_err(|e| KursalError::Network(format!("JNI vm: {e:?}")))?;
+    let env = vm
+        .attach_current_thread()
+        .map_err(|e| KursalError::Network(format!("JNI attach: {e:?}")))?;
+
+    let cls = load_kursal_class(&env, "chat.kursal.BleAdvertiser")?;
+    let app_ctx: jni::objects::JObject = (ctx.context() as jni::sys::jobject).into();
+
+    let result = env
+        .call_static_method(
+            cls,
+            "stop",
+            "(Landroid/content/Context;)V",
+            &[jni::objects::JValue::Object(app_ctx)],
+        )
+        .map_err(|e| jvm_err(&env, "BleAdvertiser.stop", e));
+
+    android_state_lock(|s| *s = None);
+
+    result.map(|_| ())
+}
+
+#[cfg(target_os = "android")]
+fn load_kursal_class<'a>(
+    env: &jni::JNIEnv<'a>,
+    dotted_name: &str,
+) -> Result<jni::objects::JClass<'a>> {
+    let ctx = ndk_context::android_context();
+    let app_ctx: jni::objects::JObject = (ctx.context() as jni::sys::jobject).into();
+
+    let cl = env
+        .call_method(app_ctx, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])
+        .map_err(|e| jvm_err(env, "getClassLoader", e))?
+        .l()
+        .map_err(|e| KursalError::Network(format!("classloader.l: {e:?}")))?;
+
+    let name_jstr = env
+        .new_string(dotted_name)
+        .map_err(|e| jvm_err(env, "class name jstring", e))?;
+
+    let cls_obj = env
+        .call_method(
+            cl,
+            "loadClass",
+            "(Ljava/lang/String;)Ljava/lang/Class;",
+            &[jni::objects::JValue::Object(name_jstr.into())],
+        )
+        .map_err(|e| jvm_err(env, "loadClass", e))?
+        .l()
+        .map_err(|e| KursalError::Network(format!("class.l: {e:?}")))?;
+
+    Ok(jni::objects::JClass::from(cls_obj))
+}
+
+#[cfg(target_os = "android")]
+pub fn android_handle_read() -> Vec<u8> {
+    let my_beacon = match android_state_lock(|s| s.as_ref().map(|st| st.my_beacon.clone())) {
+        Some(mb) => mb,
+        None => return Vec::new(),
+    };
+    let beacon_opt = my_beacon.blocking_lock();
+    match beacon_opt.as_ref() {
+        Some(b) => b.serialize().unwrap_or_default(),
+        None => Vec::new(),
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn android_handle_write(client: &str, data: &[u8]) {
+    let (reassembly, bt_event_tx) = match android_state_lock(|s| {
+        s.as_ref()
+            .map(|st| (st.reassembly.clone(), st.bt_event_tx.clone()))
+    }) {
+        Some(v) => v,
+        None => return,
+    };
+
+    if let Some(bytes) = push_fragment(&reassembly, client, data) {
+        match bincode::deserialize::<BtWireMessage>(&bytes) {
+            Ok(wire) => {
+                if let Err(e) = bt_event_tx.try_send(BtEvent::Message {
+                    from_peer_id: wire.from_peer_id,
+                    msg: wire.msg,
+                }) {
+                    log::warn!("[bt] android try_send: {e}");
+                }
+            }
+            Err(err) => {
+                log::warn!("[bt] bad wire message: {err}");
+            }
+        }
+    }
 }

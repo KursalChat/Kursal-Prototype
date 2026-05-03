@@ -2,6 +2,7 @@
   import { UserPlus } from "lucide-svelte";
   import { goto } from "$app/navigation";
   import { contactsState } from "$lib/state/contacts.svelte";
+  import { t } from "$lib/i18n";
 
   const hasContacts = $derived(contactsState.contacts.length > 0);
 </script>
@@ -9,19 +10,16 @@
 <div class="empty" data-tauri-drag-region>
   <div class="empty-inner">
     <div class="icon-wrap">
-      <img src="/winston.png" alt="Kursal Mascott" width="88" height="88" />
+      <img src="/winston.png" alt={t('chat.empty.mascotAlt')} width="88" height="88" />
     </div>
     {#if hasContacts}
-      <h2>Select a conversation</h2>
-      <p>
-        Pick a contact from the sidebar to start chatting. All your messages are
-        end-to-end encrypted.
-      </p>
+      <h2>{t('chat.empty.hasContactsHeading')}</h2>
+      <p>{t('chat.empty.hasContactsBody')}</p>
     {:else}
-      <h2>Welcome to Kursal</h2>
-      <p>Add your first contact to start sending encrypted messages.</p>
+      <h2>{t('chat.empty.noContactsHeading')}</h2>
+      <p>{t('chat.empty.noContactsBody')}</p>
       <button class="add-btn" onclick={() => goto("/add-contact")}>
-        <UserPlus size={15} /> Add a contact
+        <UserPlus size={15} /> {t('chat.empty.addContactButton')}
       </button>
     {/if}
   </div>

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { Save } from "lucide-svelte";
   import { type RelayConfig } from "$lib/api/settings";
+  import { t } from '$lib/i18n';
   import { settingsState } from "$lib/state/settings.svelte";
   import { notifications } from "$lib/state/notifications.svelte";
   import Button from "$lib/components/Button.svelte";
@@ -59,7 +60,7 @@
       };
       await settingsState.setRelay(clean);
       relay = { ...clean };
-      notifications.push("Relay settings saved", "success");
+      notifications.push(t('settings.network.successRelaySaved'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -73,7 +74,7 @@
     if (trimmed.length > 0) {
       const n = Number(trimmed);
       if (!Number.isInteger(n) || n < 1 || n > 65535) {
-        notifications.push("Port must be 1–65535 or empty", "error");
+        notifications.push(t('settings.network.errorPortInvalid'), "error");
         return;
       }
       parsed = n;
@@ -81,7 +82,7 @@
     portSaving = true;
     try {
       await settingsState.setPort(parsed);
-      notifications.push("Port saved — restart may be required", "success");
+      notifications.push(t('settings.network.successPortSaved'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -99,25 +100,25 @@
 </script>
 
 <div class="sec-head">
-  <h2>Network</h2>
-  <p>Relay, transport, and local discovery.</p>
+  <h2>{t('settings.network.heading')}</h2>
+  <p>{t('settings.network.description')}</p>
 </div>
 
-<SettingCard title="Relay">
+<SettingCard title={t('settings.network.relayCard')}>
   <SettingRow
-    title="Run as relay"
-    description="Help other peers connect by relaying encrypted traffic. Messages stay E2E encrypted."
+    title={t('settings.network.runAsRelayRow')}
+    description={t('settings.network.runAsRelayDescription')}
   >
     <Toggle
       checked={relay.enabled}
       onchange={(v) => (relay = { ...relay, enabled: v })}
-      ariaLabel="Run as relay"
+      ariaLabel={t('settings.network.runAsRelayAriaLabel')}
     />
   </SettingRow>
   {#if relay.enabled}
     <SettingRow
-      title="Max connections"
-      description="Total concurrent relayed peers."
+      title={t('settings.network.maxConnectionsRow')}
+      description={t('settings.network.maxConnectionsDescription')}
     >
       <TextInput
         type="number"
@@ -129,8 +130,8 @@
       />
     </SettingRow>
     <SettingRow
-      title="Max per IP"
-      description="Limit how many connections come from the same address."
+      title={t('settings.network.maxPerIpRow')}
+      description={t('settings.network.maxPerIpDescription')}
     >
       <TextInput
         type="number"
@@ -145,33 +146,33 @@
   {/if}
   {#snippet footer()}
     <Button onclick={saveRelay} loading={relaySaving} disabled={!relayDirty}>
-      <Save size={13} /> Save relay
+      <Save size={13} /> {t('settings.network.saveRelayButton')}
     </Button>
   {/snippet}
 </SettingCard>
 
-<SettingCard title="Transport">
+<SettingCard title={t('settings.network.transportCard')}>
   <SettingRow
-    title="Listening port"
-    description="Which port Kursal listens on. Clear the field to pick a random port."
+    title={t('settings.network.listeningPortRow')}
+    description={t('settings.network.listeningPortDescription')}
   >
     <TextInput
       type="text"
-      placeholder="random"
+      placeholder={t('settings.network.portPlaceholder')}
       width="110px"
       bind:value={port}
     />
     <Button onclick={savePort} loading={portSaving} disabled={!portDirty}
-      >Save</Button
+      >{t('settings.network.savePortButton')}</Button
     >
   </SettingRow>
 </SettingCard>
 
-<SettingCard title="Discovery">
+<SettingCard title={t('settings.network.discoveryCard')}>
   <SettingRow
-    title="Nearby share"
-    description="Allow local discovery via mDNS. Disabling this will only enable Bluetooth when on the Nearby tab."
+    title={t('settings.network.nearbyShareRow')}
+    description={t('settings.network.nearbyShareDescription')}
   >
-    <Toggle checked={nearby} onchange={toggleNearby} ariaLabel="Nearby share" />
+    <Toggle checked={nearby} onchange={toggleNearby} ariaLabel={t('settings.network.nearbyShareAriaLabel')} />
   </SettingRow>
 </SettingCard>

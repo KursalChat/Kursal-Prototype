@@ -11,6 +11,7 @@ export interface DndSchedule {
 const KEYS = {
   preview: 'kursal_notif_preview',
   dnd: 'kursal_notif_dnd',
+  appLock: 'kursal_app_lock_biometric',
 };
 
 function readJson<T>(key: string, fallback: T): T {
@@ -28,12 +29,14 @@ function writeJson<T>(key: string, value: T) {
 function createPrefsState() {
   let notificationPreview = $state<NotificationPreview>('content');
   let dnd = $state<DndSchedule>({ enabled: false, start: '22:00', end: '06:00' });
+  let appLockBiometric = $state(false);
   let initialized = $state(false);
 
   function init() {
     if (!browser || initialized) return;
     notificationPreview = readJson<NotificationPreview>(KEYS.preview, 'content');
     dnd = readJson<DndSchedule>(KEYS.dnd, dnd);
+    appLockBiometric = readJson<boolean>(KEYS.appLock, false);
     initialized = true;
   }
 
@@ -47,12 +50,19 @@ function createPrefsState() {
     writeJson(KEYS.dnd, value);
   }
 
+  function setAppLockBiometric(value: boolean) {
+    appLockBiometric = value;
+    writeJson(KEYS.appLock, value);
+  }
+
   return {
     get notificationPreview() { return notificationPreview; },
     get dnd() { return dnd; },
+    get appLockBiometric() { return appLockBiometric; },
     init,
     setPreview,
     setDnd,
+    setAppLockBiometric,
   };
 }
 

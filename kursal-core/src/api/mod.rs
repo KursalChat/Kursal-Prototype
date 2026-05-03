@@ -4,7 +4,6 @@ use crate::{
     identity::UserId,
     messaging::{StoredMessage, enums::MessageId},
 };
-use libsignal_protocol::{DeviceId, ProtocolAddress};
 use tokio::sync::oneshot;
 
 pub mod cmd_wrapper;
@@ -186,8 +185,4 @@ pub enum CoreCommand {
         save_path: String,
         reply: oneshot::Sender<Result<()>>,
     },
-}
-
-pub fn get_protocol_addr(user_id: [u8; 32]) -> ProtocolAddress {
-    ProtocolAddress::new(hex::encode(user_id), DeviceId::new(1u8).unwrap())
 }

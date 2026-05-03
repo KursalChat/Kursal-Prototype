@@ -10,11 +10,12 @@
   } from "$lib/api/benchmark";
   import { notifications } from "$lib/state/notifications.svelte";
   import Button from "$lib/components/Button.svelte";
-  import { Copy } from "lucide-svelte";
+  import { Copy, CircleCheck } from "lucide-svelte";
+  import { t } from "$lib/i18n";
 
   let {
-    name = "System Benchmark",
-    description = "Run cryptographic operations to benchmark device performance.",
+    name = t("settings.advanced.benchmarkOtpName"),
+    description = t("settings.advanced.benchmarkOtpDescription"),
   } = $props<{ name?: string; description?: string }>();
 
   let iterations = $state(100);
@@ -42,7 +43,6 @@
 
   async function start() {
     if (isRunning) return;
-
     isRunning = true;
     progress = null;
     result = null;
@@ -68,192 +68,134 @@
 
   async function copyResults() {
     if (!result) return;
-
     const text =
-      `Benchmark Results (${name})\n` +
-      `Iterations: ${result.iterations}\n` +
-      `Total Time: ${(result.total_ms / 1000).toFixed(2)}s\n` +
-      `Time per Iter (Threaded): ${result.average_with_threading_ms.toFixed(2)}ms\n` +
-      `Time per Iter (CPU): ${result.average_per_iteration_ms.toFixed(2)}ms\n` +
-      `Iterations / Sec: ${result.iterations_per_second.toFixed(2)} iter/sec`;
+      `${name}\n` +
+      `${t("settings.advanced.benchmarkResultIterations")}: ${result.iterations}\n` +
+      `${t("settings.advanced.benchmarkResultTotalTime")}: ${(result.total_ms / 1000).toFixed(2)}s\n` +
+      `${t("settings.advanced.benchmarkResultPerIterThreaded")}: ${result.average_with_threading_ms.toFixed(2)}ms\n` +
+      `${t("settings.advanced.benchmarkResultPerIterCpu")}: ${result.average_per_iteration_ms.toFixed(2)}ms\n` +
+      `${t("settings.advanced.benchmarkResultPerSecond")}: ${result.iterations_per_second.toFixed(2)}`;
 
     try {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(text);
-        notifications.push("Benchmark results copied to clipboard!", "success");
+        notifications.push(t("settings.advanced.benchmarkCopySuccess"), "success");
       } else {
-        notifications.push("Clipboard API not available", "error");
+        notifications.push(t("settings.advanced.benchmarkCopyUnavailable"), "error");
       }
     } catch (err) {
       console.error("Failed to copy:", err);
-      notifications.push("Failed to copy to clipboard", "error");
+      notifications.push(t("settings.advanced.benchmarkCopyFailed"), "error");
     }
   }
+
+  const pct = $derived(
+    progress && progress.total > 0
+      ? Math.min(100, (progress.current / progress.total) * 100)
+      : 0,
+  );
 </script>
 
-<div class="info-card">
-  <div
-    style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;"
-  >
-    <h4 style="margin: 0; color: var(--color-primary);">{name}</h4>
-  </div>
+<div class="bench">
+  <p class="bench-desc">{description}</p>
 
-  <p
-    style="margin-top: 0; margin-bottom: 1rem; color: var(--text-secondary); font-size: 0.9rem;"
-  >
-    {description}
-  </p>
-
-  <div
-    class="benchmark-controls"
-    style="display: flex; align-items: flex-end; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;"
-  >
-    <div class="form-group" style="margin-bottom: 0; width: 120px;">
-      <label
-        for="iterations"
-        style="font-size: 0.85rem; margin-bottom: 0.25rem; display: block;"
-        >Iterations</label
-      >
+  <div class="bench-controls">
+    <label class="iter-field">
+      <span class="iter-label">{t("settings.advanced.benchmarkIterationsLabel")}</span>
       <input
-        id="iterations"
         type="number"
         bind:value={iterations}
         min="1"
         max="10000"
         disabled={isRunning}
-        style="width: 100%; padding: 0.4rem 0.5rem; font-size: 0.95rem; background: var(--bg-surface, rgba(0,0,0,0.2)); border: 1px solid var(--border-color, rgba(255,255,255,0.1)); color: var(--text-primary); border-radius: 6px;"
       />
-    </div>
+    </label>
 
-    <div style="display: flex; gap: 0.5rem;">
+    <div class="bench-actions">
       <Button onclick={start} loading={isRunning}>
-        {isRunning ? "Running..." : "Run Benchmark"}
+        {isRunning
+          ? t("settings.advanced.benchmarkRunning")
+          : t("settings.advanced.benchmarkRun")}
       </Button>
       {#if isRunning}
-        <Button variant="danger" onclick={cancel}>Cancel</Button>
+        <Button variant="danger" onclick={cancel}>
+          {t("settings.advanced.benchmarkCancel")}
+        </Button>
       {/if}
     </div>
   </div>
 
   {#if error}
-    <div style="color: var(--color-danger); margin-bottom: 1rem;">
-      Error: {error}
+    <div class="bench-error">
+      {t("settings.advanced.benchmarkError", { error })}
     </div>
   {/if}
 
   {#if progress && isRunning}
-    <div
-      style="margin-top: 1rem; padding: 1rem; background: rgba(0, 0, 0, 0.15); border-radius: 8px;"
-    >
-      <div
-        style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem; color: #a1a1aa;"
-      >
-        <span>{progress.current} / {progress.total} hashes completed</span>
-        <span>{(progress.elapsed_ms / 1000).toFixed(1)}s elapsed</span>
+    <div class="bench-progress">
+      <div class="prog-meta">
+        <span>
+          {t("settings.advanced.benchmarkProgress", {
+            current: progress.current,
+            total: progress.total,
+          })}
+        </span>
+        <span>
+          {t("settings.advanced.benchmarkElapsed", {
+            seconds: (progress.elapsed_ms / 1000).toFixed(1),
+          })}
+        </span>
       </div>
-      <progress
-        value={progress.current}
-        max={progress.total}
-        style="width: 100%; height: 8px; border-radius: 4px; overflow: hidden;"
-      ></progress>
+      <div class="prog-track">
+        <div class="prog-fill" style="width: {pct}%"></div>
+      </div>
     </div>
   {/if}
 
   {#if result}
-    <div
-      style="background: rgba(0, 0, 0, 0.15); padding: 1.25rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); margin-top: 1rem;"
-    >
-      <div
-        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
-      >
-        <h4
-          style="margin: 0; font-size: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"
-        >
-          <span
-            style="display: inline-block; width: 8px; height: 8px; background-color: #10b981; border-radius: 50%;"
-          ></span>
-          Benchmark Results
-        </h4>
+    <div class="bench-results">
+      <div class="results-head">
+        <div class="results-title">
+          <CircleCheck size={14} />
+          <span>{t("settings.advanced.benchmarkResultsTitle")}</span>
+        </div>
         <button
           class="copy-btn"
           onclick={copyResults}
-          aria-label="Copy Results"
-          title="Copy Results"
+          aria-label={t("settings.advanced.benchmarkCopyResults")}
+          title={t("settings.advanced.benchmarkCopyResults")}
         >
-          <Copy size={14} />
+          <Copy size={13} />
         </button>
       </div>
-      <div
-        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;"
-      >
-        <div>
-          <div
-            style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem;"
-          >
-            Iterations
-          </div>
-          <div
-            style="font-size: 1.1rem; font-family: monospace; font-weight: 500;"
-          >
-            {result.iterations}
+
+      <div class="results-grid">
+        <div class="stat">
+          <div class="stat-label">{t("settings.advanced.benchmarkResultIterations")}</div>
+          <div class="stat-value">{result.iterations}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">{t("settings.advanced.benchmarkResultTotalTime")}</div>
+          <div class="stat-value">
+            {(result.total_ms / 1000).toFixed(2)}<span class="unit">s</span>
           </div>
         </div>
-        <div>
-          <div
-            style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem;"
-          >
-            Total Time
-          </div>
-          <div
-            style="font-size: 1.1rem; font-family: monospace; font-weight: 500;"
-          >
-            {(result.total_ms / 1000).toFixed(2)}<span
-              style="font-size: 0.8rem; color: #64748b;">s</span
-            >
+        <div class="stat">
+          <div class="stat-label">{t("settings.advanced.benchmarkResultPerIterThreaded")}</div>
+          <div class="stat-value">
+            {result.average_with_threading_ms.toFixed(2)}<span class="unit">ms</span>
           </div>
         </div>
-        <div>
-          <div
-            style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem;"
-          >
-            Time per Iter (Threaded)
-          </div>
-          <div
-            style="font-size: 1.1rem; font-family: monospace; font-weight: 500;"
-          >
-            {result.average_with_threading_ms.toFixed(2)}<span
-              style="font-size: 0.8rem; color: #64748b;">ms</span
-            >
+        <div class="stat">
+          <div class="stat-label">{t("settings.advanced.benchmarkResultPerIterCpu")}</div>
+          <div class="stat-value">
+            {result.average_per_iteration_ms.toFixed(2)}<span class="unit">ms</span>
           </div>
         </div>
-        <div>
-          <div
-            style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem;"
-          >
-            Time per Iter (CPU)
-          </div>
-          <div
-            style="font-size: 1.1rem; font-family: monospace; font-weight: 500;"
-          >
-            {result.average_per_iteration_ms.toFixed(2)}<span
-              style="font-size: 0.8rem; color: #64748b;">ms</span
-            >
-          </div>
-        </div>
-        <div>
-          <div
-            style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 0.25rem;"
-          >
-            Iterations / Sec
-          </div>
-          <div
-            style="font-size: 1.1rem; font-family: monospace; font-weight: 500;"
-          >
-            {result.iterations_per_second.toFixed(2)}<span
-              style="font-size: 0.8rem; color: #64748b;"
-            >
-              iter/sec</span
-            >
+        <div class="stat">
+          <div class="stat-label">{t("settings.advanced.benchmarkResultPerSecond")}</div>
+          <div class="stat-value">
+            {result.iterations_per_second.toFixed(2)}<span class="unit">/s</span>
           </div>
         </div>
       </div>
@@ -262,24 +204,189 @@
 </div>
 
 <style>
-  .copy-btn {
-    background: transparent;
-    border: none;
-    font-size: 0.85rem;
-    color: #94a3b8;
-    cursor: pointer;
+  .bench {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .bench-desc {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .bench-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .iter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 120px;
+  }
+
+  .iter-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+  }
+
+  .iter-field input {
+    padding: 7px 10px;
+    font-size: 13px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    width: 100%;
+    transition: border-color var(--transition);
+  }
+
+  .iter-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .iter-field input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .bench-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .bench-error {
+    padding: 8px 10px;
+    background: var(--danger-dim, rgba(239, 68, 68, 0.12));
+    color: var(--danger, #ef4444);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+
+  .bench-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  .prog-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .prog-track {
+    height: 6px;
+    background: var(--bg-hover);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .prog-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: inherit;
+    transition: width 120ms linear;
+  }
+
+  .bench-results {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+
+  .results-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .results-title {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    transition:
-      color 0.1s ease,
-      background-color 0.1s ease;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-primary);
+  }
+
+  .results-title :global(svg) {
+    color: var(--success);
+  }
+
+  .copy-btn {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    transition: background var(--transition), color var(--transition);
   }
 
   .copy-btn:hover {
-    color: #f8fafc;
-    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+  }
+
+  .stat-label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  .stat-value {
+    font-size: 15px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .unit {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: 2px;
+    font-weight: 400;
   }
 </style>

@@ -14,11 +14,12 @@
   import { settingsState } from "$lib/state/settings.svelte";
   import { notifyMessage, getPermission } from "$lib/api/system-notify";
   import { frontendReady } from "$lib/api/identity";
-  import { OS } from "$lib/api/window";
+  import { OS, isMobile } from "$lib/api/window";
   import { finalizeDeferredReceiveTarget } from "$lib/utils/file-transfer-paths";
   import { acceptFileOffer } from "$lib/api/messages";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
   import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
+  import BiometricLock from "$lib/components/BiometricLock.svelte";
   import type {
     MessageReceivedPayload,
     ConnectionChangedPayload,
@@ -37,6 +38,16 @@
   let { children } = $props();
   let backgroundUnread = 0;
   let baseTitle = "Kursal";
+
+  function readAppLockPref(): boolean {
+    if (typeof localStorage === "undefined") return false;
+    try {
+      return JSON.parse(localStorage.getItem("kursal_app_lock_biometric") ?? "false");
+    } catch {
+      return false;
+    }
+  }
+  let unlocked = $state(!isMobile || !readAppLockPref());
 
   function refreshTitle() {
     document.title =
@@ -60,6 +71,40 @@
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Mobile keyboard handling: shrink the document to visualViewport.height
+    // so content reflows above the keyboard. Listening only to visualViewport
+    // events (not focusin/focusout) avoids a jitter where focus fires before
+    // the keyboard actually opens, causing two layout passes.
+    const syncViewport = () => {
+      const vv = window.visualViewport;
+      if (vv) {
+        document.documentElement.style.setProperty(
+          "--app-height",
+          `${vv.height}px`,
+        );
+      }
+      window.scrollTo(0, 0);
+    };
+    syncViewport();
+    window.visualViewport?.addEventListener("resize", syncViewport);
+    window.visualViewport?.addEventListener("scroll", syncViewport);
+
+    // Belt-and-suspenders pinch-zoom block for iOS Safari/WKWebView,
+    // which still honors gesture events even with user-scalable=no.
+    const blockGesture = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", blockGesture);
+    document.addEventListener("gesturechange", blockGesture);
+    document.addEventListener("gestureend", blockGesture);
+
+    // Block double-tap zoom (iOS).
+    let lastTouchEnd = 0;
+    const blockDoubleTap = (e: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 350) e.preventDefault();
+      lastTouchEnd = now;
+    };
+    document.addEventListener("touchend", blockDoubleTap, { passive: false });
 
     const onboarded = localStorage.getItem("kursal_onboarded");
     if (onboarded !== "done" && $page.url.pathname !== "/onboarding") {
@@ -354,6 +399,12 @@
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.visualViewport?.removeEventListener("resize", syncViewport);
+      window.visualViewport?.removeEventListener("scroll", syncViewport);
+      document.removeEventListener("gesturestart", blockGesture);
+      document.removeEventListener("gesturechange", blockGesture);
+      document.removeEventListener("gestureend", blockGesture);
+      document.removeEventListener("touchend", blockDoubleTap);
       backgroundUnread = 0;
       refreshTitle();
       void Promise.all(unlistenPromises).then((fns) => {
@@ -363,6 +414,10 @@
   });
 </script>
 
-{@render children()}
+{#if unlocked}
+  {@render children()}
+{:else}
+  <BiometricLock onUnlock={() => (unlocked = true)} />
+{/if}
 <ToastContainer />
 <ConfirmDialog />

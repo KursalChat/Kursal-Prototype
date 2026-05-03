@@ -181,6 +181,12 @@ JAVA_HOME=/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home PATH=$JAVA
 cp -r src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk ../build/Kursal.apk
 
 
+# ── iOS ───────────────────────────────────────────────────────────────────────
+rm -f src-tauri/gen/apple/build/arm64/Kursal.ipa
+
+bun tauri ios build --config '{"build":{"beforeBuildCommand":""}}'
+cp src-tauri/gen/apple/build/arm64/Kursal.ipa ../build/Kursal.ipa
+
 # ── Generate latest.json ──────────────────────────────────────────────────────
 BASE_URL="https://app.kursal.chat"
 
@@ -216,23 +222,3 @@ EOF
 
 echo "✅ latest.json written for v$VERSION"
 echo "=> make sure to write some release notes in it :p"
-
-
-# TODO: iOS
-# bun tauri ios build --open --config '{"build":{"beforeBuildCommand":""}}'
-
-# and run this in parallel (pain) - https://github.com/tauri-apps/tauri/issues/14940
-# xcodebuild archive \
-#          -project gen/apple/kursal-app.xcodeproj \
-#          -scheme kursal-app_iOS \
-#          -archivePath gen/apple/build/App.xcarchive \
-#          -configuration Release
-#          CODE_SIGNING_REQUIRED=NO 
-#          CODE_SIGNING_ALLOWED=NO
-
-# mkdir -p ../build/Payload
-# cp -r src-tauri/gen/apple/build/kursal-app_iOS.xcarchive/Products/Applications/Kursal.app ../build/Payload
-# cd ../build
-# zip -r Kursal.ipa Payload
-# rm -rf Payload
-# cd ../kursal-tauri

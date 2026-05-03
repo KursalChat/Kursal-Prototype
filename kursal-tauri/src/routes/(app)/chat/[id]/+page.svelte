@@ -1,13 +1,15 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { onMount, tick } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
   import { browser } from "$app/environment";
   import { goto } from "$app/navigation";
   import { stat } from "@tauri-apps/plugin-fs";
+  import { t } from "$lib/i18n";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { messagesState } from "$lib/state/messages.svelte";
   import { profileState } from "$lib/state/profile.svelte";
   import { settingsState } from "$lib/state/settings.svelte";
+  import { draftsState } from "$lib/state/drafts.svelte";
   import {
     sendText,
     sendFileOffer,
@@ -29,6 +31,8 @@
   } from "$lib/utils/file-transfer-paths";
   import type { MessageResponse } from "$lib/types";
   import { notifications } from "$lib/state/notifications.svelte";
+  import { typingState } from "$lib/state/typing.svelte";
+  import * as haptics from "$lib/utils/haptics";
   import { confirm } from "@tauri-apps/plugin-dialog";
   import { ShieldAlert, X, Paperclip, ChevronDown } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
@@ -40,7 +44,10 @@
   import MessageComposer from "./MessageComposer.svelte";
   import OfflineQueueBar from "./OfflineQueueBar.svelte";
   import ActionSheet from "./ActionSheet.svelte";
+  import SelectTextModal from "./SelectTextModal.svelte";
   import FileConfirmModal from "./FileConfirmModal.svelte";
+  import MediaViewer from "./MediaViewer.svelte";
+  import { convertFileSrc } from "@tauri-apps/api/core";
   import EmojiPicker from "$lib/components/EmojiPicker.svelte";
   import {
     formatGroupTime,
@@ -67,6 +74,7 @@
   let showEmojiPicker = $state<string | null>(null);
   let emojiPickerAnchor = $state<DOMRect | null>(null);
   let actionSheetMsgId = $state<string | null>(null);
+  let selectTextMsgId = $state<string | null>(null);
   let fileOfferActionState = $state<
     Record<string, "idle" | "accepting" | "accepted">
   >({});
@@ -74,11 +82,19 @@
   let isCoarsePointer = $state(false);
   let listEl = $state<HTMLElement | null>(null);
   let composerEl = $state<HTMLTextAreaElement | null>(null);
+  let composerHostEl = $state<HTMLElement | null>(null);
+  let composerHeight = $state(76);
 
   let isScrolledToBottom = $state(true);
   let isAtMaxBottom = $state(true);
   let unreadCount = $state(0);
   let isDraggingFile = $state(false);
+  let mediaViewer = $state<{
+    src: string;
+    path: string;
+    kind: "image" | "video";
+    filename: string;
+  } | null>(null);
   let pendingFile = $state<{
     backendPath: string;
     filename: string;
@@ -115,10 +131,17 @@
         profileState.avatarBytes,
         contactId,
       );
+      const status = contactsState.connectionStatus[contactId];
+      const online = status === "direct" || status === "holepunch" || status === "relay";
       if (contact) contactsState.upsert({ ...contact, profileShared: true });
-      notifications.push("Profile shared", "success");
+      notifications.push(
+        online
+          ? t("chat.conversation.successProfileShared")
+          : t("chat.conversation.successProfileQueued", { name: contact?.displayName ?? "" }),
+        "success",
+      );
     } catch (e) {
-      notifications.push("Failed to share profile", "error");
+      notifications.push(t("chat.conversation.errorProfileShare"), "error");
       console.error(e);
     }
   }
@@ -264,6 +287,10 @@
   let lastTypingSentAt = 0;
   function maybeSendTyping() {
     if (!contactId) return;
+    if (editingMessageId) {
+      lastTypingSentAt = 0;
+      return;
+    }
     if (!settingsState.typingIndicators) {
       lastTypingSentAt = 0;
       return;
@@ -326,8 +353,8 @@
   async function handleDelete(msg: MessageResponse) {
     actionSheetMsgId = null;
     if (
-      await confirm("Delete this message for everyone?", {
-        title: "Delete message",
+      await confirm(t("chat.conversation.deleteConfirmMessage"), {
+        title: t("chat.conversation.deleteConfirmTitle"),
         kind: "warning",
       })
     ) {
@@ -336,12 +363,13 @@
         messagesState.markDeleted(msg.id, contactId);
       } catch (e) {
         console.error("Delete failed", e);
-        notifications.push("Failed to delete message", "error");
+        notifications.push(t("chat.conversation.errorDeleteMessage"), "error");
       }
     }
   }
 
   async function toggleReaction(msg: MessageResponse, emoji: string) {
+    void haptics.select();
     try {
       const reactions = messagesState.reactionsFor(msg.id, contactId);
       const isReacted = reactions
@@ -375,9 +403,9 @@
     actionSheetMsgId = null;
     try {
       await navigator.clipboard.writeText(msg.content);
-      notifications.push("Copied", "success");
+      notifications.push(t("chat.conversation.successCopied"), "success");
     } catch {
-      notifications.push("Could not copy", "error");
+      notifications.push(t("chat.conversation.errorCopy"), "error");
     }
   }
 
@@ -460,7 +488,7 @@
     if (!contact && !contactsState.loading) {
       contactMissingTimer = setTimeout(() => {
         if (contactId && !contactsState.getById(contactId)) {
-          notifications.push("Contact not found", "error");
+          notifications.push(t("chat.conversation.errorContactNotFound"), "error");
           goto("/chat", { replaceState: true });
         }
       }, 100);
@@ -500,6 +528,21 @@
   });
 
   $effect(() => {
+    const id = contactId;
+    if (!id) return;
+    // Read draft non-reactively so this effect only fires on contact
+    // switch — not when handleSend clears the draft (which would race
+    // and re-load stale text into the composer).
+    inputText = untrack(() => draftsState.get(id));
+    replyingToMessageId = null;
+    editingMessageId = null;
+    return () => {
+      if (editingMessageId) return;
+      draftsState.set(id, inputText);
+    };
+  });
+
+  $effect(() => {
     if (!listEl) return;
     const handleClick = (e: Event) => {
       void handleMarkdownClick(e as MouseEvent);
@@ -508,6 +551,17 @@
     return () => {
       listEl?.removeEventListener("click", handleClick);
     };
+  });
+
+  $effect(() => {
+    if (!composerHostEl) return;
+    const el = composerHostEl;
+    const ro = new ResizeObserver(() => {
+      composerHeight = el.offsetHeight;
+    });
+    ro.observe(el);
+    composerHeight = el.offsetHeight;
+    return () => ro.disconnect();
   });
 
   // Re-pin to bottom when message content grows (image loads, file progress
@@ -600,7 +654,7 @@
     if (!text) return;
     if (text.length > MAX_MESSAGE_LENGTH) {
       notifications.push(
-        `Message too long (${text.length}/${MAX_MESSAGE_LENGTH})`,
+        t("chat.conversation.errorMessageTooLong", { length: text.length, max: MAX_MESSAGE_LENGTH }),
         "error",
       );
       return;
@@ -615,7 +669,7 @@
         inputText = "";
         editingMessageId = null;
       } catch (e) {
-        notifications.push("Failed to edit message", "error");
+        notifications.push(t("chat.conversation.errorEditMessage"), "error");
         console.error("Edit failed:", e);
       } finally {
         sending = false;
@@ -626,6 +680,7 @@
     if (!contactId) return;
     const replyTo = replyingToMessageId;
     inputText = "";
+    draftsState.clear(contactId);
     lastTypingSentAt = 0;
     cancelReply();
 
@@ -641,10 +696,13 @@
       replyTo,
     });
 
+    void haptics.impact("medium");
+
     void sendText(cid, text, replyTo)
       .then((realId) => messagesState.replaceId(pendingId, cid, realId))
       .catch((e) => {
         messagesState.updateStatusIfSending(pendingId, cid, "queued");
+        void haptics.notify("warning");
         console.error("Send failed, queued for offline:", e);
       });
   }
@@ -667,7 +725,7 @@
       await stageFileForSend(prepared.backendPath, prepared.filename);
     } catch (e) {
       notifications.push(
-        `Failed to open file: ${e instanceof Error ? e.message : e}`,
+        t("chat.conversation.errorOpenFile", { error: e instanceof Error ? e.message : String(e) }),
         "error",
       );
       console.error("File pick failed:", e);
@@ -681,7 +739,7 @@
       await stageFileForSend(prepared.backendPath, prepared.filename);
     } catch (e) {
       notifications.push(
-        `Failed to prepare file: ${e instanceof Error ? e.message : e}`,
+        t("chat.conversation.errorPrepareFile", { error: e instanceof Error ? e.message : String(e) }),
         "error",
       );
       console.error("Drop handler failed:", e);
@@ -714,7 +772,7 @@
       pendingFile = null;
     } catch (e) {
       notifications.push(
-        `Failed to send file: ${e instanceof Error ? e.message : e}`,
+        t("chat.conversation.errorSendFile", { error: e instanceof Error ? e.message : String(e) }),
         "error",
       );
       console.error("File send failed:", e);
@@ -757,7 +815,7 @@
         );
       }
       fileOfferActionState[msg.id] = "accepted";
-      notifications.push("File transfer accepted", "success");
+      notifications.push(t("chat.conversation.successFileAccepted"), "success");
     } catch (e) {
       fileOfferActionState[msg.id] = "idle";
       const raw = e instanceof Error ? e.message : String(e);
@@ -771,8 +829,8 @@
           lower.includes("permission denied") ||
           lower.includes("os error 5"));
       const hint = isAccessDenied
-        ? "Windows blocked write. Try Downloads, or allow Kursal in Controlled Folder Access."
-        : `Failed to accept file: ${raw}`;
+        ? t("chat.conversation.errorWindowsFile")
+        : t("chat.conversation.errorAcceptFile", { error: raw });
       notifications.push(hint, "error");
       console.error("Accept file offer failed", e);
     }
@@ -795,7 +853,9 @@
           }
           const realId = await sendText(cid, msg.content, msg.replyTo);
           messagesState.replaceId(pendingId, cid, realId);
-          messagesState.updateStatus(realId, cid, "delivered");
+          // Stay "sending" — backend will emit a delivery event once
+          // the peer actually acks. Eagerly marking "delivered" here
+          // would lie when the peer is offline.
         } catch (e) {
           messagesState.updateStatus(pendingId, cid, "queued");
           console.error("Queue flush: send failed", e);
@@ -848,7 +908,7 @@
           },
         });
       } catch (e) {
-        notifications.push("Failed to resend file", "error");
+        notifications.push(t("chat.conversation.errorResendFile"), "error");
       }
       return;
     }
@@ -865,7 +925,7 @@
         replyTo: msg.replyTo,
       });
     } catch (e) {
-      notifications.push("Failed to resend", "error");
+      notifications.push(t("chat.conversation.errorResend"), "error");
     }
   }
 
@@ -886,6 +946,7 @@
   }
   function onBubbleTouchEnd(msgId: string, msg: MessageResponse) {
     if (swipeOffset?.id === msgId && swipeOffset.dx > 60) {
+      void haptics.impact("medium");
       startReply(msg);
     }
     swipeStart = { x: 0, y: 0, id: "" };
@@ -900,7 +961,7 @@
     if (longPressTimer) clearTimeout(longPressTimer);
     longPressTimer = setTimeout(() => {
       actionSheetMsgId = msgId;
-      if (navigator.vibrate) navigator.vibrate(15);
+      void haptics.impact("medium");
     }, 450);
   }
   function cancelLongPress() {
@@ -917,10 +978,18 @@
   const actionSheetMsg = $derived(
     actionSheetMsgId ? messageIndex.get(actionSheetMsgId) : null,
   );
+  const selectTextMsg = $derived(
+    selectTextMsgId ? messageIndex.get(selectTextMsgId) : null,
+  );
+
+  function openSelectText(msg: MessageResponse) {
+    selectTextMsgId = msg.id;
+    actionSheetMsgId = null;
+  }
 </script>
 
 {#if contact}
-  <div class="chat">
+  <div class="chat" style="--composer-h: {composerHeight}px;">
     <ChatHeader
       {contact}
       onOpenProfile={openProfileModal}
@@ -929,15 +998,15 @@
 
     {#if showShareBanner}
       <div class="share-banner">
-        <span>Share your profile with <b>{contact.displayName}</b>?</span>
+        <span>{t("chat.conversation.shareBanner", { name: contact.displayName })}</span>
         <div class="banner-actions">
           <button class="banner-btn primary" onclick={handleShareQuickProfile}
-            >Share</button
+            >{t("chat.conversation.shareBannerButton")}</button
           >
           <button
             class="banner-btn icon"
             onclick={closeShareBanner}
-            aria-label="Dismiss"><X size={14} /></button
+            aria-label={t("chat.conversation.dismissBannerAriaLabel")}><X size={14} /></button
           >
         </div>
       </div>
@@ -946,25 +1015,31 @@
     <div class="messages" bind:this={listEl} onscroll={handleScroll}>
       {#if visibleMessages.length === 0}
         <div class="empty-chat">
-          <Avatar
-            name={contact.displayName}
-            src={contact.avatarBase64}
-            size={72}
-          />
-          <h3>{contact.displayName}</h3>
-          <p>This is the beginning of your encrypted conversation.</p>
+          <div class="empty-avatar">
+            <span class="empty-avatar-glow"></span>
+            <Avatar
+              name={contact.displayName}
+              src={contact.avatarBase64}
+              size={84}
+            />
+          </div>
+          <h3>{t("chat.conversation.emptyHeading", { name: contact.displayName })}</h3>
+          <p class="empty-trust">
+            <ShieldAlert size={13} />
+            {t("chat.conversation.emptyEncrypted")}
+          </p>
           {#if !contact.verified}
             <button class="empty-verify" onclick={openSecurityCodeModal}>
               <ShieldAlert size={14} />
-              Verify identity
+              {t("chat.conversation.verifyButton")}
             </button>
           {/if}
         </div>
       {:else}
         {#each messageGroups as group, gi (gi)}
           {#if firstUnreadId && group.messages[0]?.id === firstUnreadId}
-            <div class="unread-separator" aria-label="New messages">
-              <span>New messages</span>
+            <div class="unread-separator" aria-label={t("chat.conversation.newMessages")}>
+              <span>{t("chat.conversation.newMessages")}</span>
             </div>
           {/if}
           <div class="msg-group" class:sent={group.direction === "sent"}>
@@ -1047,6 +1122,14 @@
                         emojiPickerAnchor = rect;
                       }
                     }}
+                    onOpenMedia={(path, kind, filename) => {
+                      mediaViewer = {
+                        src: convertFileSrc(path),
+                        path,
+                        kind,
+                        filename,
+                      };
+                    }}
                   />
                 {/each}
               </div>
@@ -1054,46 +1137,68 @@
           </div>
         {/each}
       {/if}
+
+      {#if typingState.isTyping(contact.userId)}
+        <div class="typing-row" aria-label={t("chat.composer.typingIndicator", { name: contact.displayName })}>
+          <Avatar
+            name={contact.displayName}
+            src={contact.avatarBase64}
+            size={22}
+          />
+          <span class="typing-dots">
+            <span></span><span></span><span></span>
+          </span>
+        </div>
+      {/if}
     </div>
 
     {#if !isScrolledToBottom}
       <button
         class="scroll-to-bottom"
+        class:has-unread={unreadCount > 0}
         onclick={() => scrollToBottom("smooth")}
-        aria-label="Jump to latest"
+        aria-label={t("chat.conversation.jumpToLatest")}
       >
         {#if unreadCount > 0}
+          <Avatar
+            name={contact.displayName}
+            src={contact.avatarBase64}
+            size={22}
+          />
           <span class="scroll-badge"
             >{unreadCount > 99 ? "99+" : unreadCount}</span
           >
+        {:else}
+          <ChevronDown size={18} />
         {/if}
-        <ChevronDown size={18} />
       </button>
     {/if}
 
-    <OfflineQueueBar
-      count={queuedCount}
-      flushing={flushingQueue}
-      onFlush={flushQueue}
-    />
+    <div class="composer-host" bind:this={composerHostEl}>
+      <OfflineQueueBar
+        count={queuedCount}
+        flushing={flushingQueue}
+        onFlush={flushQueue}
+      />
 
-    <MessageComposer
-      {contact}
-      bind:inputText
-      {sending}
-      {isCoarsePointer}
-      replyingPreview={replyingToPreview}
-      {editingPreview}
-      replyActive={!!replyingToMessageId}
-      editActive={!!editingMessageId}
-      onSend={handleSend}
-      onAttach={handleSendFile}
-      onInput={onComposerInput}
-      onCancelReply={cancelReply}
-      onCancelEdit={cancelEdit}
-      onOpenProfile={openProfileModal}
-      bind:composerEl
-    />
+      <MessageComposer
+        {contact}
+        bind:inputText
+        {sending}
+        {isCoarsePointer}
+        replyingPreview={replyingToPreview}
+        {editingPreview}
+        replyActive={!!replyingToMessageId}
+        editActive={!!editingMessageId}
+        onSend={handleSend}
+        onAttach={handleSendFile}
+        onInput={onComposerInput}
+        onCancelReply={cancelReply}
+        onCancelEdit={cancelEdit}
+        onOpenProfile={openProfileModal}
+        bind:composerEl
+      />
+    </div>
   </div>
 
   {#if actionSheetMsg}
@@ -1110,8 +1215,16 @@
       }}
       onReply={() => actionSheetMsg && startReply(actionSheetMsg)}
       onCopy={() => actionSheetMsg && copyMessageText(actionSheetMsg)}
+      onSelectText={() => actionSheetMsg && openSelectText(actionSheetMsg)}
       onEdit={() => actionSheetMsg && startEdit(actionSheetMsg)}
       onDelete={() => actionSheetMsg && handleDelete(actionSheetMsg)}
+    />
+  {/if}
+
+  {#if selectTextMsg}
+    <SelectTextModal
+      text={selectTextMsg.content}
+      onClose={() => (selectTextMsgId = null)}
     />
   {/if}
 
@@ -1130,7 +1243,7 @@
     <div class="drop-overlay" aria-hidden="true">
       <div class="drop-overlay-inner">
         <Paperclip size={36} />
-        <span>Drop file to send</span>
+        <span>{t("chat.conversation.dropFileOverlay")}</span>
       </div>
     </div>
   {/if}
@@ -1148,6 +1261,16 @@
         onClose={closePicker}
       />
     </div>
+  {/if}
+
+  {#if mediaViewer}
+    <MediaViewer
+      src={mediaViewer.src}
+      path={mediaViewer.path}
+      kind={mediaViewer.kind}
+      filename={mediaViewer.filename}
+      onClose={() => (mediaViewer = null)}
+    />
   {/if}
 
   {#if pendingFile}
@@ -1180,14 +1303,14 @@
     gap: 10px;
     padding: 10px 16px;
     background: var(--accent-dim);
-    border-bottom: 1px solid var(--border);
     font-size: 13px;
     color: var(--text-secondary);
     flex-shrink: 0;
+    animation: share-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
   }
-  .share-banner b {
-    color: var(--text-primary);
-    font-weight: 600;
+  @keyframes share-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
   .banner-actions {
     display: flex;
@@ -1225,12 +1348,52 @@
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px 16px 48px;
+    padding: 16px 16px calc(var(--composer-h, 76px) + 24px);
     display: flex;
     flex-direction: column;
     gap: 2px;
     scroll-behavior: smooth;
     overscroll-behavior: contain;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 14px
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black 14px
+    );
+    scrollbar-width: thin;
+  }
+
+  .composer-host {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 0 8px calc(8px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 12;
+  }
+  .composer-host::before {
+    content: "";
+    position: absolute;
+    inset: -14px 0 0 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+      to top,
+      var(--bg-secondary),
+      transparent
+    );
+  }
+  .composer-host > :global(*) {
+    pointer-events: auto;
   }
 
   .empty-chat {
@@ -1239,21 +1402,45 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     color: var(--text-muted);
     padding: 40px 24px;
   }
+  .empty-avatar {
+    position: relative;
+    display: inline-flex;
+    margin-bottom: 4px;
+  }
+  .empty-avatar-glow {
+    position: absolute;
+    inset: -16px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--accent) 35%, transparent) 0%,
+      transparent 70%
+    );
+    animation: empty-breathe 3.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes empty-breathe {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.08); }
+  }
   .empty-chat h3 {
-    font-size: 20px;
+    font-size: 22px;
     color: var(--text-primary);
     margin: 4px 0 0;
     font-weight: 600;
+    letter-spacing: -0.01em;
   }
-  .empty-chat p {
-    font-size: 13px;
+  .empty-trust {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text-muted);
     margin: 0;
-    max-width: 280px;
-    line-height: 1.5;
   }
   .empty-verify {
     display: flex;
@@ -1280,23 +1467,32 @@
   }
 
   .time-separator {
-    text-align: center;
-    margin: 18px 0 8px;
-    position: sticky;
-    top: 4px;
-    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 22px 4px 10px;
     pointer-events: none;
+  }
+  .time-separator::before,
+  .time-separator::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--border) 30%,
+      var(--border) 70%,
+      transparent
+    );
   }
   .time-separator span {
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
-    background: var(--surface);
-    padding: 4px 12px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
   }
 
   .group-body {
@@ -1332,20 +1528,29 @@
   .scroll-to-bottom {
     position: absolute;
     right: 16px;
-    bottom: calc(var(--composer-height, 64px) + 12px);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    bottom: calc(var(--composer-h, 76px) + env(safe-area-inset-bottom, 0px) + 16px);
+    height: 36px;
+    min-width: 36px;
+    border-radius: 999px;
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-light);
     color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-    transition: all var(--transition);
+    gap: 6px;
+    padding: 0 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    transition: transform var(--transition), background var(--transition);
     z-index: 15;
-    animation: fadeInFab 0.18s ease;
+    animation: fadeInFab 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .scroll-to-bottom.has-unread {
+    padding: 0 10px 0 4px;
   }
   .scroll-to-bottom:hover {
     background: var(--bg-hover);
@@ -1365,21 +1570,17 @@
     }
   }
   .scroll-badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
     background: var(--accent);
     color: #fff;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     min-width: 18px;
     height: 18px;
-    padding: 0 5px;
+    padding: 0 6px;
     border-radius: 999px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid var(--bg-primary);
   }
 
   .loading {
@@ -1387,6 +1588,41 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .typing-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0 4px;
+    padding: 4px 10px 4px 4px;
+    border-radius: 999px;
+    align-self: flex-start;
+    background: var(--bg-hover);
+    animation: typing-in 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-muted);
+  }
+  .typing-dots span {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: typing-bounce 1.2s ease-in-out infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.16s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.32s; }
+  @keyframes typing-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+    30% { transform: translateY(-2px); opacity: 1; }
+  }
+  @keyframes typing-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .unread-separator {

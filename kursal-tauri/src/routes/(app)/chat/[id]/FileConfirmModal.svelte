@@ -2,6 +2,7 @@
   import { FileText } from "lucide-svelte";
   import Spinner from "$lib/components/Spinner.svelte";
   import { formatFileSize } from "./chat-utils";
+  import { t } from "$lib/i18n";
 
   interface Props {
     filename: string;
@@ -25,13 +26,13 @@
   <div
     class="file-confirm"
     role="dialog"
-    aria-label="Send file"
+    aria-label={t('chat.fileConfirm.dialogAriaLabel')}
     onclick={(e) => e.stopPropagation()}
     onkeydown={(e) => e.stopPropagation()}
     tabindex="-1"
   >
     <div class="file-confirm-icon"><FileText size={28} /></div>
-    <h3>Send file?</h3>
+    <h3>{t('chat.fileConfirm.heading')}</h3>
     <div class="file-confirm-info">
       <span class="f-name" title={filename}>{filename}</span>
       {#if sizeBytes > 0}
@@ -40,10 +41,10 @@
     </div>
     <div class="file-confirm-actions">
       <button class="fc-btn ghost" onclick={onCancel} disabled={sending}>
-        Cancel
+        {t('chat.fileConfirm.cancel')}
       </button>
       <button class="fc-btn primary" onclick={onConfirm} disabled={sending}>
-        {#if sending}<Spinner size={14} color="#fff" />{:else}Send{/if}
+        {#if sending}<Spinner size={14} color="#fff" />{:else}{t('chat.fileConfirm.send')}{/if}
       </button>
     </div>
   </div>

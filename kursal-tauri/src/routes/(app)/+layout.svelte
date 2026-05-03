@@ -20,6 +20,7 @@
   import { setBadgeCount } from "$lib/api/window";
   import { uiState } from "$lib/state/ui.svelte";
   import type { PeerIdHolderPayload } from "$lib/types";
+  import { t } from "$lib/i18n";
 
   let { children } = $props();
 
@@ -79,7 +80,7 @@
       : last.content.replace(/\s+/g, " ").trim();
     const display = text.length > 44 ? text.slice(0, 41) + "..." : text;
     return {
-      text: (last.direction === "sent" ? "You: " : "") + display,
+      text: (last.direction === "sent" ? t('layout.messagePrefixSent') : "") + display,
       ts: last.timestamp,
     };
   }
@@ -99,10 +100,10 @@
   }
 
   function getStatusLabel(status: string | undefined): string {
-    if (!status || status === "disconnected") return "Offline";
-    if (status === "direct") return "Online";
-    if (status === "holepunch") return "Online";
-    if (status === "relay") return "Online · relay";
+    if (!status || status === "disconnected") return t('layout.statusOffline');
+    if (status === "direct") return t('layout.statusOnline');
+    if (status === "holepunch") return t('layout.statusOnline');
+    if (status === "relay") return t('layout.statusOnlineRelay');
     return status.charAt(0).toUpperCase() + status.slice(1);
   }
 
@@ -144,22 +145,22 @@
     <button
       class="mobile-menu"
       onclick={() => (uiState.mobileSidebarOpen = true)}
-      aria-label="Open menu"
+      aria-label={t('layout.openMenu')}
     >
       <Menu size={22} />
     </button>
-    <span class="mobile-title">Kursal</span>
+    <span class="mobile-title">{t('layout.appName')}</span>
   </div>
 
   <aside class="sidebar" class:open={uiState.mobileSidebarOpen}>
     <div class="sidebar-header" data-tauri-drag-region>
-      <h1>Kursal</h1>
+      <h1>{t('layout.appName')}</h1>
       <div class="header-actions">
         <button
           class="icon-btn"
           onclick={handleAddContact}
-          title="Add contact"
-          aria-label="Add contact"
+          title={t('layout.addContact')}
+          aria-label={t('layout.addContact')}
           data-tour="add-contact-btn"
         >
           <UserPlus size={17} />
@@ -167,15 +168,15 @@
         <button
           class="icon-btn"
           onclick={handleSettings}
-          title="Settings"
-          aria-label="Settings"
+          title={t('layout.settings')}
+          aria-label={t('layout.settings')}
         >
           <SettingsIcon size={17} />
         </button>
         <button
           class="icon-btn mobile-close"
           onclick={() => (uiState.mobileSidebarOpen = false)}
-          aria-label="Close menu"
+          aria-label={t('layout.closeMenu')}
         >
           <X size={18} />
         </button>
@@ -186,7 +187,7 @@
       <Search size={14} />
       <input
         type="text"
-        placeholder="Search contacts"
+        placeholder={t('layout.searchPlaceholder')}
         bind:value={search}
         spellcheck="false"
         autocorrect="off"
@@ -196,28 +197,28 @@
         <button
           class="clear-search"
           onclick={() => (search = "")}
-          aria-label="Clear search"><X size={12} /></button
+          aria-label={t('layout.clearSearch')}><X size={12} /></button
         >
       {/if}
     </div>
 
     <div class="contacts-list">
       {#if contactsState.loading}
-        <div class="empty-state">Loading...</div>
+        <div class="empty-state">{t('layout.loadingContacts')}</div>
       {:else if contactsState.contacts.length === 0}
         <div class="empty-state column">
           <MessageSquare size={24} />
-          <span>No contacts yet</span>
+          <span>{t('layout.noContacts')}</span>
           <button
             class="empty-cta"
             onclick={handleAddContact}
             data-tour="add-contact-empty"
           >
-            <UserPlus size={14} /> Add your first contact
+            <UserPlus size={14} /> {t('layout.addFirstContact')}
           </button>
         </div>
       {:else if filteredContacts.length === 0}
-        <div class="empty-state">No contacts match</div>
+        <div class="empty-state">{t('layout.noContactsMatch')}</div>
       {:else}
         {#each sortedContacts as contact (contact.userId)}
           {@const unread = messagesState.unreadFor(contact.userId)}
@@ -269,7 +270,7 @@
     <button
       class="user-panel"
       onclick={handleSettings}
-      aria-label="Open settings"
+      aria-label={t('layout.openSettings')}
     >
       <Avatar
         name={profileState.displayName}
@@ -329,8 +330,8 @@
   }
 
   .sidebar-header {
-    height: var(--header-height);
-    padding: 0 12px;
+    height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 12px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -594,7 +595,7 @@
   /* User panel (as button) */
   .user-panel {
     width: 100%;
-    min-height: 55px;
+    min-height: 49px;
     padding-left: 12px;
     padding-right: 12px;
     border-top: 1px solid var(--border);
@@ -682,8 +683,8 @@
       top: 0;
       left: 0;
       right: 0;
-      height: var(--header-height);
-      padding: 0 6px;
+      height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+      padding: env(safe-area-inset-top, 0px) 6px 0;
       background: var(--panel);
       backdrop-filter: blur(20px) saturate(140%);
       -webkit-backdrop-filter: blur(20px) saturate(140%);
@@ -720,7 +721,7 @@
       width: 100%;
     }
     .shell:not(.chat-active) .content {
-      padding-top: var(--header-height);
+      padding-top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
     }
     .contact-row {
       padding: 11px 10px;

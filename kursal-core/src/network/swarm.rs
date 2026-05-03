@@ -1,3 +1,4 @@
+// TODO: remove all "#[cfg(not(target_os = "ios"))]" and accept mdns with apple dev cert (ios)
 use crate::{
     KursalError, Result,
     api::handle_incoming::handle_incoming_stream,
@@ -11,10 +12,11 @@ use crate::{
     storage::RelayConfig,
 };
 use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+#[cfg(not(target_os = "ios"))]
+use libp2p::mdns;
 use libp2p::{
     Multiaddr, PeerId, StreamProtocol, Swarm, SwarmBuilder,
     futures::StreamExt,
-    mdns,
     multiaddr::Protocol,
     request_response::{self, ProtocolSupport},
     swarm::{NetworkBehaviour, SwarmEvent, behaviour::toggle::Toggle},
@@ -101,6 +103,7 @@ pub struct KursalBehaviour {
     pub relay_server: Toggle<libp2p::relay::Behaviour>,
     pub dcutr: libp2p::dcutr::Behaviour,
     pub kad: libp2p::kad::Behaviour<KursalKadStore>,
+    #[cfg(not(target_os = "ios"))]
     pub mdns: Toggle<libp2p::mdns::tokio::Behaviour>,
     pub identify: libp2p::identify::Behaviour,
     pub request_response: request_response::Behaviour<KursalMsgCodec>,
@@ -164,6 +167,7 @@ impl SwarmHandle {
                     kad_config,
                 );
 
+                #[cfg(not(target_os = "ios"))]
                 let mdns = if mdns_enabled {
                     Toggle::from(Some(libp2p::mdns::tokio::Behaviour::new(mdns::Config {
                         query_interval: Duration::from_secs(60),
@@ -174,6 +178,8 @@ impl SwarmHandle {
                     log::info!("mDNS disabled");
                     Toggle::from(None)
                 };
+                #[cfg(target_os = "ios")]
+                let _ = mdns_enabled;
 
                 let identify = libp2p::identify::Behaviour::new(libp2p::identify::Config::new(
                     "/kursal/v1.0.0".to_string(),
@@ -205,6 +211,7 @@ impl SwarmHandle {
                     relay_server,
                     dcutr,
                     kad,
+                    #[cfg(not(target_os = "ios"))]
                     mdns,
                     identify,
                     request_response,
@@ -359,6 +366,7 @@ async fn handle_swarm_event(
                 swarm.behaviour_mut().kad.add_address(&peer_id, addr);
             }
         }
+        #[cfg(not(target_os = "ios"))]
         SwarmEvent::Behaviour(KursalBehaviourEvent::Mdns(libp2p::mdns::Event::Discovered(
             peers,
         ))) => {
@@ -389,7 +397,8 @@ async fn handle_swarm_event(
             }
         }
 
-        // TODO: add a PeerExpired or similar, connection is not lost
+        // TODO: add a PeerExpired or similar, connection is not lost$
+        #[cfg(not(target_os = "ios"))]
         SwarmEvent::Behaviour(KursalBehaviourEvent::Mdns(mdns::Event::Expired(peers))) => {
             for (peer_id, addr) in &peers {
                 log::warn!("[mDNS] peer expired {} at {}", peer_id, addr);
@@ -656,6 +665,7 @@ pub enum KursalBehaviourEvent {
     RelayServer(libp2p::relay::Event),
     Dcutr(libp2p::dcutr::Event),
     Kad(libp2p::kad::Event),
+    #[cfg(not(target_os = "ios"))]
     Mdns(libp2p::mdns::Event),
     Identify(libp2p::identify::Event),
     RequestResponse(request_response::Event<Vec<u8>, Vec<u8>>),
@@ -682,6 +692,7 @@ impl From<libp2p::kad::Event> for KursalBehaviourEvent {
         Self::Kad(value)
     }
 }
+#[cfg(not(target_os = "ios"))]
 impl From<libp2p::mdns::Event> for KursalBehaviourEvent {
     fn from(value: libp2p::mdns::Event) -> Self {
         Self::Mdns(value)
@@ -856,6 +867,52 @@ pub async fn get_listen_addrs(cmd_tx: &mpsc::Sender<SwarmCommand>) -> Result<Vec
     Ok(relay_addresses)
 }
 
+pub async fn get_nearby_listen_addrs(cmd_tx: &mpsc::Sender<SwarmCommand>) -> Result<Vec<String>> {
+    let (tx, rx) = oneshot::channel();
+    cmd_tx
+        .send(SwarmCommand::GetListenAddresses { reply_tx: tx })
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    let all_addresses = rx
+        .await
+        .map_err(|err| KursalError::Network(err.to_string()))?;
+
+    let mut out: Vec<String> = Vec::new();
+    for addr in all_addresses.iter() {
+        let s = addr.to_string();
+        if s.contains("/p2p-circuit") {
+            out.push(s);
+            continue;
+        }
+        if is_routable_lan(addr) {
+            out.push(s);
+        }
+    }
+    Ok(out)
+}
+
+fn is_routable_lan(addr: &Multiaddr) -> bool {
+    for proto in addr.iter() {
+        match proto {
+            Protocol::Ip4(ip) => {
+                if ip.is_loopback() || ip.is_unspecified() {
+                    return false;
+                }
+                return true;
+            }
+            Protocol::Ip6(ip) => {
+                if ip.is_loopback() || ip.is_unspecified() {
+                    return false;
+                }
+                return true;
+            }
+            _ => continue,
+        }
+    }
+    false
+}
+
 pub fn str_to_multiaddr(addresses: &[String]) -> Result<Vec<Multiaddr>> {
     addresses
         .iter()
@@ -909,10 +966,10 @@ pub async fn open_peer_stream(
 pub fn is_routable_multiaddr(addr: &Multiaddr) -> bool {
     for proto in addr.iter() {
         match proto {
-            Protocol::Ip4(ip) => {
-                if ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() {
-                    return false;
-                }
+            Protocol::Ip4(ip)
+                if (ip.is_loopback() || ip.is_link_local() || ip.is_unspecified()) =>
+            {
+                return false;
             }
             Protocol::Ip6(ip) => {
                 let is_link_local = (ip.segments()[0] & 0xffc0) == 0xfe80;

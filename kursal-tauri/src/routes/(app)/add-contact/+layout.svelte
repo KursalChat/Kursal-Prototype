@@ -2,11 +2,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { QrCode, FileArchive, Radar } from "lucide-svelte";
+  import { t } from "$lib/i18n";
 
   const methods = [
-    { label: "One-Time Code", href: "/add-contact/otp", icon: QrCode, tour: "otp-tab" },
-    { label: "Long-Term Code", href: "/add-contact/ltc", icon: FileArchive, tour: "ltc-tab" },
-    { label: "Nearby", href: "/add-contact/nearby", icon: Radar, tour: "nearby-tab" },
+    { label: t('addContact.methodSelection.otpLabel'), href: "/add-contact/otp", icon: QrCode, tour: "otp-tab" },
+    { label: t('addContact.methodSelection.ltcLabel'), href: "/add-contact/ltc", icon: FileArchive, tour: "ltc-tab" },
+    { label: t('addContact.methodSelection.nearbyLabel'), href: "/add-contact/nearby", icon: Radar, tour: "nearby-tab" },
   ];
 
   let { children } = $props();
@@ -14,7 +15,7 @@
 
 <div class="add-contact">
   <header class="ac-header" data-tauri-drag-region>
-    <h2>Add Contact</h2>
+    <h2>{t('addContact.methodSelection.heading')}</h2>
   </header>
 
   <nav class="tabs">
@@ -84,8 +85,17 @@
     font-weight: 600;
     color: var(--text-secondary);
     transition: all var(--transition);
-    white-space: nowrap;
     border: 1px solid transparent;
+    min-width: 0;
+  }
+  .tab :global(svg) {
+    flex-shrink: 0;
+  }
+  .tab-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .tab:hover {

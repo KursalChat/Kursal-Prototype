@@ -5,6 +5,7 @@
   import { notifications } from '$lib/state/notifications.svelte';
   import { settingsState } from '$lib/state/settings.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { t } from '$lib/i18n';
   import type { NearbyOrigin } from '$lib/types';
   import { Bluetooth, Wifi, WifiOff } from 'lucide-svelte';
 
@@ -45,7 +46,7 @@
         }
       }, 3000);
     } catch (e) {
-      notifications.push('Failed to start nearby discovery', 'error');
+      notifications.push(t('addContact.nearby.discoveryFailed'), 'error');
       console.error('Start nearby failed:', e);
       isInitialLoad = false;
     }
@@ -65,9 +66,9 @@
     setConnecting(peerId, true);
     try {
       await connectNearby(peerId, origin);
-      notifications.push('Connection request sent', 'info');
+      notifications.push(t('addContact.nearby.connectionSent'), 'info');
     } catch (e) {
-      notifications.push('Failed to connect to peer', 'error');
+      notifications.push(t('addContact.nearby.connectionFailed'), 'error');
       console.error('Connect failed:', e);
     } finally {
       setConnecting(peerId, false);
@@ -79,9 +80,9 @@
     try {
       await acceptNearby(peerId);
       nearbyState.removePendingRequest(peerId);
-      notifications.push('Connection accepted', 'success');
+      notifications.push(t('addContact.nearby.connectionAccepted'), 'success');
     } catch (e) {
-      notifications.push('Failed to accept connection', 'error');
+      notifications.push(t('addContact.nearby.acceptFailed'), 'error');
       console.error('Accept failed:', e);
     } finally {
       setConnecting(peerId, false);
@@ -92,7 +93,7 @@
     try {
       await declineNearby(peerId);
       nearbyState.removePendingRequest(peerId);
-      notifications.push('Connection declined', 'info');
+      notifications.push(t('addContact.nearby.connectionDeclined'), 'info');
     } catch (e) {
       console.error('Decline failed:', e);
     }
@@ -104,10 +105,9 @@
     <section class="banner">
       <WifiOff size={16} strokeWidth={2.25} />
       <div class="banner-text">
-        <p class="banner-title">Wi-Fi discovery off</p>
+        <p class="banner-title">{t('addContact.nearby.wifiDisabled')}</p>
         <p class="banner-body">
-          Nearby Share is disabled in Settings, so mDNS over Wi-Fi is off. Only Bluetooth discovery
-          is active, and only while this page is open.
+          {t('addContact.nearby.wifiDisabledDescription')}
         </p>
       </div>
     </section>
@@ -115,32 +115,32 @@
 
   <section class="identity-card">
     <div>
-      <p class="kicker">Your Nearby Name</p>
-      <h3>{nearbyState.mySessionName || 'Starting discovery...'}</h3>
+      <p class="kicker">{t('addContact.nearby.yourName')}</p>
+      <h3>{nearbyState.mySessionName || t('addContact.nearby.startingDiscovery')}</h3>
     </div>
     <span class="status" class:active={nearbyState.active}>
-      {nearbyState.active ? 'Scanning' : 'Stopped'}
+      {nearbyState.active ? t('addContact.nearby.scanning') : t('addContact.nearby.stopped')}
     </span>
   </section>
 
   {#if Object.keys(nearbyState.pendingRequests).length > 0}
     <section class="panel warning">
       <div class="panel-header">
-        <h4>Incoming Requests</h4>
+        <h4>{t('addContact.nearby.incomingRequests')}</h4>
       </div>
       <div class="row-list">
         {#each Object.entries(nearbyState.pendingRequests) as [peerId, sessionName]}
           <div class="row-item">
             <div class="row-info">
               <p class="row-title">{sessionName}</p>
-              <p class="row-subtitle">{peerId.slice(0, 14)}... wants to connect</p>
+              <p class="row-subtitle">{peerId.slice(0, 14)}... {t('addContact.nearby.wantsToConnect')}</p>
             </div>
             <div class="row-actions">
               <Button variant="secondary" loading={connecting.has(peerId)} onclick={() => handleDecline(peerId)}>
-                Decline
+                {t('addContact.nearby.declineButton')}
               </Button>
               <Button variant="primary" loading={connecting.has(peerId)} onclick={() => handleAccept(peerId)}>
-                Accept
+                {t('addContact.nearby.acceptButton')}
               </Button>
             </div>
           </div>
@@ -151,14 +151,14 @@
 
   <section class="panel">
     <div class="panel-header">
-      <h4>Devices Nearby</h4>
-      <p>{nearbyState.peers.length} found</p>
+      <h4>{t('addContact.nearby.devicesNearby')}</h4>
+      <p>{nearbyState.peers.length} {t('addContact.nearby.found')}</p>
     </div>
 
     {#if isInitialLoad}
-      <div class="empty">Scanning local network...</div>
+      <div class="empty">{t('addContact.nearby.scanningNetwork')}</div>
     {:else if nearbyState.peers.length === 0}
-      <div class="empty">No devices found yet. Keep this page open on both devices.</div>
+      <div class="empty">{t('addContact.nearby.noDevices')}</div>
     {:else}
       <div class="row-list">
         {#each nearbyState.peers as peer (`${peer.peerId}:${peer.origin}`)}
@@ -169,17 +169,17 @@
                 <span class="origin-badge" class:bluetooth={peer.origin === 'Bluetooth'}>
                   {#if peer.origin === 'Bluetooth'}
                     <Bluetooth size={11} strokeWidth={2.5} />
-                    Bluetooth
+                    {t('addContact.nearby.bluetooth')}
                   {:else}
                     <Wifi size={11} strokeWidth={2.5} />
-                    Wi-Fi
+                    {t('addContact.nearby.wifi')}
                   {/if}
                 </span>
               </p>
               <p class="row-subtitle">{peer.peerId.slice(0, 14)}...</p>
             </div>
             <Button variant="primary" loading={connecting.has(peer.peerId)} onclick={() => handleConnect(peer.peerId, peer.origin)}>
-              Connect
+              {t('addContact.nearby.connectButton')}
             </Button>
           </div>
         {/each}

@@ -37,13 +37,14 @@
 <style>
   .segmented {
     display: inline-flex;
+    flex-wrap: wrap;
     padding: 3px;
     background: var(--bg-input);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     gap: 2px;
   }
-  .segmented[data-full="true"] { display: flex; width: 100%; }
+  .segmented[data-full="true"] { display: flex; flex-wrap: wrap; width: 100%; }
   .seg {
     display: inline-flex;
     align-items: center;
@@ -55,8 +56,18 @@
     font-weight: 500;
     color: var(--text-secondary);
     transition: background var(--transition), color var(--transition);
-    white-space: nowrap;
-    flex: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .seg :global(svg) {
+    flex-shrink: 0;
+  }
+  .seg span {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+    line-height: 1.2;
   }
   .segmented[data-size="sm"] .seg {
     padding: 4px 10px;

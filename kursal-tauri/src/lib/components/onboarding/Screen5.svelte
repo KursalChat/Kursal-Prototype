@@ -1,8 +1,5 @@
 <script lang="ts">
-  const LINE_1 = "This is what private actually looks like.";
-  const LINE_2 = "Let's make it yours.";
-  const BUTTON_LABEL = "Let's go";
-
+  import { t } from '$lib/i18n';
   import Winston from "./Winston.svelte";
   import Avatar from "$lib/components/Avatar.svelte";
   import AvatarPicker from "$lib/components/AvatarPicker.svelte";
@@ -74,7 +71,7 @@
     if (exiting || saving) return;
     const name = displayName.trim();
     if (!name) {
-      notifications.push("Pick a name first", "error");
+      notifications.push(t('onboarding.screen5.errorPickName'), "error");
       nameInput?.focus();
       return;
     }
@@ -84,7 +81,7 @@
       profileState.update(name, avatarBase64, avatarBytes);
     } catch (e) {
       console.error("Profile save failed", e);
-      notifications.push("Saved locally but broadcast failed", "error");
+      notifications.push(t('onboarding.screen5.errorBroadcastFailed'), "error");
     }
     saving = false;
     exiting = true;
@@ -130,7 +127,7 @@
     <div class="text-block">
       <div class="line line-1" class:show={showLine1}>
         {#if showLine1}
-          {#each chars(LINE_1) as { ch, delay }}
+          {#each chars(t('onboarding.screen5.line1')) as { ch, delay }}
             <span class="char" style="animation-delay: {delay}ms"
               >{ch === " " ? "\u00A0" : ch}</span
             >
@@ -140,7 +137,7 @@
 
       <div class="line line-2" class:show={showLine2}>
         {#if showLine2}
-          {#each chars(LINE_2) as { ch, delay }}
+          {#each chars(t('onboarding.screen5.line2')) as { ch, delay }}
             <span class="char" style="animation-delay: {delay}ms"
               >{ch === " " ? "\u00A0" : ch}</span
             >
@@ -156,8 +153,8 @@
             <button
               type="button"
               class="avatar-slot"
-              title="Upload a photo"
-              aria-label="Upload a photo"
+              title={t('onboarding.screen5.uploadPhoto')}
+              aria-label={t('onboarding.screen5.uploadPhoto')}
               tabindex={showForm ? 0 : -1}
               onclick={open}
             >
@@ -174,7 +171,7 @@
               <button
                 type="button"
                 class="avatar-remove"
-                aria-label="Remove photo"
+                aria-label={t('onboarding.screen5.removePhoto')}
                 tabindex={showForm ? 0 : -1}
                 onclick={removeAvatar}
               >
@@ -189,7 +186,7 @@
         bind:this={nameInput}
         class="name-input"
         type="text"
-        placeholder="Your name"
+        placeholder={t('onboarding.screen5.namePlaceholder')}
         maxlength="40"
         bind:value={displayName}
         onkeydown={handleKey}
@@ -197,7 +194,7 @@
         tabindex={showForm ? 0 : -1}
       />
 
-      <span class="hint">You can change this later in Settings.</span>
+      <span class="hint">{t('onboarding.screen5.nameHint')}</span>
     </div>
   </div>
 
@@ -208,7 +205,7 @@
       disabled={exiting || saving || !showForm || !displayName.trim()}
       tabindex={showForm ? 0 : -1}
     >
-      <span>{saving ? "Saving…" : BUTTON_LABEL}</span>
+      <span>{saving ? t('onboarding.screen5.saving') : t('onboarding.screen5.cta')}</span>
       {#if !saving}
         <svg
           width="18"
@@ -649,7 +646,7 @@
   .dark-overlay {
     position: absolute;
     inset: 0;
-    background: #080c1a;
+    background: var(--bg-primary);
     opacity: 0;
     pointer-events: none;
     z-index: 6;

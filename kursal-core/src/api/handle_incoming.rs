@@ -215,10 +215,11 @@ pub async fn handle_incoming(
         return Ok(()); // ignore
     }
 
-    let address = ProtocolAddress::new(hex::encode(contact.user_id.0), DeviceId::new(1u8).unwrap());
+    let remote_address =
+        ProtocolAddress::new(hex::encode(contact.user_id.0), DeviceId::new(1u8).unwrap());
     let now = get_timestamp_secs()?;
 
-    let received = message_receive(db.clone(), &address, &encrypted_payload).await?;
+    let received = message_receive(db.clone(), &remote_address, &encrypted_payload).await?;
     let kmessage = KursalMessage::deserialize(&received)?;
 
     match kmessage {

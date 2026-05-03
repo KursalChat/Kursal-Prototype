@@ -1,3 +1,9 @@
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 360ms;
+  animation-timing-function: ease;
+}
+
 :root {
   --bg-primary: #0b1120;
   --bg-secondary: #111827;
@@ -502,6 +508,9 @@ html {
   height: 100vh;
   overflow: hidden;
   background: var(--bg-secondary);
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* `zoom` on <body> scales all descendants. Compensating width/height
@@ -513,13 +522,21 @@ html {
  * That way swapping between chat and settings doesn't shift where the
  * radial sits visually. */
 body {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: calc(100vw / var(--zoom, 1));
-  height: calc(100dvh / var(--zoom, 1));
+  height: calc(var(--app-height, 100dvh) / var(--zoom, 1));
   zoom: var(--zoom, 1);
   overflow: hidden;
   overscroll-behavior: none;
+  touch-action: pan-x pan-y;
   background: var(--bg-primary);
   color: var(--text-primary);
+  transition:
+    background-color 320ms ease,
+    background 320ms ease,
+    color 320ms ease;
   font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 15px;
   line-height: 1.5;

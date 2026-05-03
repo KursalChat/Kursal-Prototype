@@ -1,53 +1,9 @@
 <script lang="ts">
-  const stepData: Record<Step, StepData> = {
-    intro: {
-      img: "/winston-warm.png",
-      title: "Hey! I'm Winston",
-      body: "I see... it's your first time on Kursal! Let me show you how adding contacts works.",
-      cta: "Show me",
-    },
-    "click-add": {
-      img: "/winston.png",
-      body: "First, hit the **Add Contact** button. There are three ways to add a friend, and I'll walk you through each one.",
-    },
-    "otp-detail": {
-      img: "/winston-key.png",
-      title: "One-Time Code",
-      body: "You or your friend generates a one-off password: eight random words. The other types it in. Single-use, great for sharing via voice or text.",
-      cta: "Got it",
-    },
-    "click-ltc": {
-      img: "/winston.png",
-      body: "Now check out **Long-Term Codes**. Click that tab.",
-    },
-    "ltc-detail": {
-      img: "/winston-key.png",
-      title: "Long-Term Code",
-      body: "You generate a file that multiple people can import to add you. Only one is valid at a time. Auto-expires after 7 days, or revoke it whenever you want.",
-      cta: "Next",
-    },
-    "click-nearby": {
-      img: "/winston.png",
-      body: "Last one. **Nearby**. This one feels magical. Click it!",
-    },
-    "nearby-detail": {
-      img: "/winston-smug.png",
-      title: "Nearby Share",
-      body: "If you and your friend are on the same Wi-Fi, or close enough for Bluetooth, you'll just *appear* on each other's screens. As long as you're both on this page.",
-      cta: "Great",
-    },
-    outro: {
-      img: "/winston-warm.png",
-      title: "You're all set!",
-      body: "Pick whichever method fits the moment. Welcome to Kursal, hope you stick around.",
-      cta: "Let's go",
-    },
-  };
-
   import { onMount, tick } from "svelte";
   import { page } from "$app/state";
   import { fly, fade, scale } from "svelte/transition";
   import { backOut } from "svelte/easing";
+  import { t } from "$lib/i18n";
 
   type Step =
     | "intro"
@@ -70,14 +26,14 @@
 
   onMount(() => {
     if (localStorage.getItem(KEY) === "done") return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       active = true;
     }, 700);
     const s = setTimeout(() => {
       skipReady = true;
     }, 5700);
     return () => {
-      clearTimeout(t);
+      clearTimeout(timer);
       clearTimeout(s);
     };
   });
@@ -156,6 +112,51 @@
     cta?: string;
   };
 
+  const stepData: Record<Step, StepData> = {
+    intro: {
+      img: "/winston-warm.png",
+      title: t('tour.steps.intro.title'),
+      body: t('tour.steps.intro.body'),
+      cta: t('tour.steps.intro.cta'),
+    },
+    "click-add": {
+      img: "/winston.png",
+      body: t('tour.steps.clickAdd.body'),
+    },
+    "otp-detail": {
+      img: "/winston-key.png",
+      title: t('tour.steps.otpDetail.title'),
+      body: t('tour.steps.otpDetail.body'),
+      cta: t('tour.steps.otpDetail.cta'),
+    },
+    "click-ltc": {
+      img: "/winston.png",
+      body: t('tour.steps.clickLtc.body'),
+    },
+    "ltc-detail": {
+      img: "/winston-key.png",
+      title: t('tour.steps.ltcDetail.title'),
+      body: t('tour.steps.ltcDetail.body'),
+      cta: t('tour.steps.ltcDetail.cta'),
+    },
+    "click-nearby": {
+      img: "/winston.png",
+      body: t('tour.steps.clickNearby.body'),
+    },
+    "nearby-detail": {
+      img: "/winston-smug.png",
+      title: t('tour.steps.nearbyDetail.title'),
+      body: t('tour.steps.nearbyDetail.body'),
+      cta: t('tour.steps.nearbyDetail.cta'),
+    },
+    outro: {
+      img: "/winston-warm.png",
+      title: t('tour.steps.outro.title'),
+      body: t('tour.steps.outro.body'),
+      cta: t('tour.steps.outro.cta'),
+    },
+  };
+
   function next() {
     if (step === "intro") step = "click-add";
     else if (step === "otp-detail") step = "click-ltc";
@@ -180,7 +181,7 @@
 </script>
 
 {#if active}
-  <div class="tour" role="dialog" aria-label="Kursal tour">
+  <div class="tour" role="dialog" aria-label={t('tour.dialogAriaLabel')}>
     {#if showSpotlight && rect}
       <!-- 4-quadrant dim around the target — clicks pass through the cutout -->
       <div
@@ -236,7 +237,7 @@
         <div class="winston-wrap">
           <img
             src={data.img}
-            alt="Winston"
+            alt={t('tour.winstonAlt')}
             class="winston"
             in:scale={{ duration: 420, start: 0.6, easing: backOut }}
           />
@@ -253,7 +254,7 @@
           <div class="actions">
             {#if step === "intro" && skipReady}
               <button class="skip" onclick={finish} in:fade={{ duration: 240 }}>
-                Skip tour
+                {t('tour.skipButton')}
               </button>
             {:else}
               <span class="skip-placeholder"></span>

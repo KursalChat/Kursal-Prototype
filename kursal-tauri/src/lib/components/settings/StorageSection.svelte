@@ -33,6 +33,7 @@
   import Select from "./Select.svelte";
   import Checkbox from "./Checkbox.svelte";
   import TextInput from "./TextInput.svelte";
+  import { t } from '$lib/i18n';
 
   let shared = $state<SharedFileEntry[]>([]);
   let sharedLoading = $state(false);
@@ -120,7 +121,7 @@
       const next = new Set(selection);
       next.delete(id);
       selection = next;
-      notifications.push("Share revoked", "success");
+      notifications.push(t('settings.storage.successShareRevoked'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     }
@@ -130,11 +131,10 @@
     if (selection.size === 0) return;
     const count = selection.size;
     const ok = await confirmDialog({
-      title: `Revoke ${count} share${count === 1 ? "" : "s"}?`,
-      message:
-        "Recipients will immediately lose the ability to download these files.",
-      detail: "Files they have already downloaded stay on their device.",
-      confirmLabel: "Revoke",
+      title: t('settings.storage.revokeConfirmTitle', { count }),
+      message: t('settings.storage.revokeConfirmMessage'),
+      detail: t('settings.storage.revokeConfirmDetail'),
+      confirmLabel: t('settings.storage.revokeConfirm'),
       tone: "danger",
     });
     if (!ok) return;
@@ -143,7 +143,7 @@
       await revokeSharedFilesBulk(ids);
       shared = shared.filter((f) => !selection.has(f.id));
       selection = new Set();
-      notifications.push("Shares revoked", "success");
+      notifications.push(t('settings.storage.successSharesRevoked'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     }
@@ -153,7 +153,7 @@
     acceptSaving = true;
     try {
       await settingsState.setAutoAccept({ ...acceptCfg });
-      notifications.push("Auto-accept saved", "success");
+      notifications.push(t('settings.storage.successAutoAcceptSaved'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -165,7 +165,7 @@
     downloadSaving = true;
     try {
       await settingsState.setAutoDownload({ ...downloadCfg });
-      notifications.push("Storage limit saved", "success");
+      notifications.push(t('settings.storage.successStorageLimitSaved'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -197,7 +197,7 @@
   }
 
   function fmtDate(ts: number | null): string {
-    if (ts === null) return "Never";
+    if (ts === null) return t('settings.storage.never');
     return new Date(ts * 1000).toLocaleDateString();
   }
 
@@ -291,18 +291,18 @@
   }
 
   const acceptModes: { value: AutoAcceptMode; label: string }[] = [
-    { value: "nobody", label: "Nobody" },
-    { value: "verified", label: "Verified" },
-    { value: "all", label: "All" },
+    { value: "nobody", label: t('settings.storage.acceptNobody') },
+    { value: "verified", label: t('settings.storage.acceptVerified') },
+    { value: "all", label: t('settings.storage.acceptAll') },
   ];
 
   const scopes: { value: AutoDownloadScope; label: string }[] = [
-    { value: "per_contact", label: "Per contact" },
-    { value: "all_contacts", label: "All contacts" },
+    { value: "per_contact", label: t('settings.storage.scopePerContact') },
+    { value: "all_contacts", label: t('settings.storage.scopeAllContacts') },
   ];
 
   const contactOptions = $derived([
-    { value: "", label: "All contacts" },
+    { value: "", label: t('settings.storage.allContacts') },
     ...contactsState.contacts.map((c) => ({
       value: c.userId,
       label: c.displayName,
@@ -315,11 +315,11 @@
 </script>
 
 <div class="sec-head">
-  <h2>Storage</h2>
-  <p>Shared files, auto-accept, and disk usage.</p>
+  <h2>{t('settings.storage.heading')}</h2>
+  <p>{t('settings.storage.description')}</p>
 </div>
 
-<SettingCard title="Shared files">
+<SettingCard title={t('settings.storage.sharedFilesCard')}>
   <div class="files-head">
     <div class="files-filters">
       <Select
@@ -335,21 +335,21 @@
         onclick={() => (filterNeverAccessed = !filterNeverAccessed)}
       >
         <Funnel size={12} />
-        Never accessed
+        {t('settings.storage.neverAccessed')}
       </button>
     </div>
     <div class="files-actions">
       {#if selection.size > 0}
-        <span class="selection-count">{selection.size} selected</span>
+        <span class="selection-count">{t('settings.storage.selectedCount', { count: selection.size })}</span>
         <button class="bulk-revoke-btn" onclick={handleBulkRevoke}>
-          <Trash2 size={12} /> Revoke
+          <Trash2 size={12} /> {t('settings.storage.revokeButton')}
         </button>
       {/if}
       <button
         class="icon-btn"
         onclick={loadShared}
         disabled={sharedLoading}
-        aria-label="Refresh"
+        aria-label={t('settings.storage.refreshAriaLabel')}
       >
         <RefreshCw size={13} />
       </button>
@@ -357,9 +357,9 @@
   </div>
 
   {#if sharedLoading}
-    <div class="empty">Loading…</div>
+    <div class="empty">{t('settings.storage.sharedFilesLoading')}</div>
   {:else if filtered.length === 0}
-    <div class="empty">No shared files match.</div>
+    <div class="empty">{t('settings.storage.noSharedFiles')}</div>
   {:else}
     <div class="table-wrap">
       <table>
@@ -372,11 +372,11 @@
                 ariaLabel="Select all"
               />
             </th>
-            <th>File</th>
-            <th>Size</th>
-            <th>Recipient</th>
-            <th>Shared</th>
-            <th>Last access</th>
+            <th>{t('settings.storage.tableFile')}</th>
+            <th>{t('settings.storage.tableSize')}</th>
+            <th>{t('settings.storage.tableRecipient')}</th>
+            <th>{t('settings.storage.tableShared')}</th>
+            <th>{t('settings.storage.tableLastAccess')}</th>
             <th></th>
           </tr>
         </thead>
@@ -387,7 +387,7 @@
                 <Checkbox
                   checked={selection.has(f.id)}
                   onchange={(v) => toggleSelect(f.id, v)}
-                  ariaLabel="Select {basename(f.filepath)}"
+                  ariaLabel={`${t('common.cancel')} ${basename(f.filepath)}`}
                 />
               </td>
               <td class="file-cell" title={f.filepath}>
@@ -403,13 +403,13 @@
                 <button
                   class="icon-btn-sm"
                   onclick={() => handleReveal(f.filepath)}
-                  aria-label="Show in folder"
-                  title="Show in folder"
+                  aria-label={t('settings.storage.showInFolderAriaLabel')}
+                  title={t('settings.storage.showInFolderTitle')}
                 >
                   <FolderSearch size={13} />
                 </button>
                 <button class="revoke-btn" onclick={() => handleRevoke(f.id)}
-                  >Revoke</button
+                  >{t('settings.storage.revokeButton')}</button
                 >
               </td>
             </tr>
@@ -421,12 +421,12 @@
 </SettingCard>
 
 <SettingCard
-  title="Auto-accept"
-  description="Automatically accept file offers up to a size cap."
+  title={t('settings.storage.autoAcceptCard')}
+  description={t('settings.storage.autoAcceptDescription')}
 >
   <SettingRow
-    title="Accept from"
-    description="Which contacts are trusted for auto-accept."
+    title={t('settings.storage.acceptFromRow')}
+    description={t('settings.storage.acceptFromDescription')}
   >
     <Segmented
       value={acceptCfg.mode}
@@ -436,8 +436,8 @@
     />
   </SettingRow>
   <SettingRow
-    title="Size cap"
-    description="Files larger than this still need manual approval."
+    title={t('settings.storage.sizeCap')}
+    description={t('settings.storage.sizeCapDescription')}
   >
     <div class="number-input">
       <TextInput
@@ -448,23 +448,23 @@
         onchange={(v) =>
           (acceptCfg = { ...acceptCfg, sizeCapBytes: fromMB(v) })}
       />
-      <span class="suffix">MB</span>
+      <span class="suffix">{t('settings.storage.mbSuffix')}</span>
     </div>
   </SettingRow>
   {#snippet footer()}
     <Button onclick={saveAccept} loading={acceptSaving} disabled={!acceptDirty}>
-      <Save size={13} /> Save
+      <Save size={13} /> {t('settings.storage.saveButton')}
     </Button>
   {/snippet}
 </SettingCard>
 
 <SettingCard
-  title="Auto-download quota"
-  description="Auto-accept stops once this quota is full."
+  title={t('settings.storage.autoDownloadCard')}
+  description={t('settings.storage.autoDownloadDescription')}
 >
   <SettingRow
-    title="Scope"
-    description="Apply the limit per contact or as a single total."
+    title={t('settings.storage.scopeRow')}
+    description={t('settings.storage.scopeDescription')}
   >
     <Segmented
       value={downloadCfg.scope}
@@ -473,7 +473,7 @@
       size="sm"
     />
   </SettingRow>
-  <SettingRow title="Limit" description="Default 100 MB.">
+  <SettingRow title={t('settings.storage.limitRow')} description={t('settings.storage.limitDescription')}>
     <div class="number-input">
       <TextInput
         type="number"
@@ -483,7 +483,7 @@
         onchange={(v) =>
           (downloadCfg = { ...downloadCfg, limitBytes: fromMB(v) })}
       />
-      <span class="suffix">MB</span>
+      <span class="suffix">{t('settings.storage.mbSuffix')}</span>
     </div>
   </SettingRow>
   {#snippet footer()}
@@ -492,31 +492,30 @@
       loading={downloadSaving}
       disabled={!downloadDirty}
     >
-      <Save size={13} /> Save
+      <Save size={13} /> {t('settings.storage.saveButton')}
     </Button>
   {/snippet}
 </SettingCard>
 
-<SettingCard title="Disk usage">
+<SettingCard title={t('settings.storage.diskUsageCard')}>
   {#if !usage}
     <div class="usage-cta">
       <p class="usage-cta-msg">
-        Computing disk usage scans every contact's files and messages. May take
-        some time.
+        {t('settings.storage.computeUsageMessage')}
       </p>
       <Button onclick={loadUsage} loading={usageLoading}>
-        <RefreshCw size={13} /> Compute usage
+        <RefreshCw size={13} /> {t('settings.storage.computeUsageButton')}
       </Button>
     </div>
   {:else}
-    <SettingRow title="Logs" description="Application logs.">
+    <SettingRow title={t('settings.storage.logsRow')} description={t('settings.storage.logsDescription')}>
       <span class="usage-value">{fmtBytes(usage.logsBytes)}</span>
     </SettingRow>
 
     <div class="usage-stack">
       <div class="usage-row">
         <div class="usage-row-head">
-          <span class="usage-row-title">Database</span>
+          <span class="usage-row-title">{t('settings.storage.databaseSection')}</span>
           <span class="usage-row-total mono">{fmtBytes(usage.dbBytes)}</span>
         </div>
         <div class="bar" class:bar-empty={dbSegments.length === 0}>
@@ -543,7 +542,7 @@
 
       <div class="usage-row">
         <div class="usage-row-head">
-          <span class="usage-row-title">File shares</span>
+          <span class="usage-row-title">{t('settings.storage.fileSharesSection')}</span>
           <span class="usage-row-total mono">{fmtBytes(usage.filesBytes)}</span>
         </div>
         <div class="bar" class:bar-empty={filesSegments.length === 0}>
@@ -566,7 +565,7 @@
             {/each}
           </div>
         {:else}
-          <div class="legend muted-empty">No shared files.</div>
+          <div class="legend muted-empty">{t('settings.storage.noSharedFilesLegend')}</div>
         {/if}
       </div>
     </div>
@@ -576,15 +575,15 @@
       class="icon-btn"
       onclick={loadUsage}
       disabled={usageLoading}
-      aria-label="Refresh"
+      aria-label={t('settings.storage.refreshAriaLabel')}
     >
       <RefreshCw size={13} />
     </button>
     <Button variant="secondary" onclick={openFiles}>
-      <FolderOpen size={13} /> Open files folder
+      <FolderOpen size={13} /> {t('settings.storage.openFilesFolder')}
     </Button>
     <Button variant="secondary" onclick={openLogs}>
-      <FolderOpen size={13} /> Open log folder
+      <FolderOpen size={13} /> {t('settings.storage.openLogFolder')}
     </Button>
   {/snippet}
 </SettingCard>

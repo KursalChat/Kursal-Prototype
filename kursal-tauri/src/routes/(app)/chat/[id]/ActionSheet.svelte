@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Reply, Copy, Pencil, Trash2, MoreHorizontal } from "lucide-svelte";
+  import { Reply, Copy, Pencil, Trash2, MoreHorizontal, TextCursorInput } from "lucide-svelte";
   import type { MessageResponse } from "$lib/types";
+  import { t } from "$lib/i18n";
 
   interface Props {
     msg: MessageResponse;
@@ -9,6 +10,7 @@
     onMoreEmoji: () => void;
     onReply: () => void;
     onCopy: () => void;
+    onSelectText: () => void;
     onEdit: () => void;
     onDelete: () => void;
   }
@@ -20,6 +22,7 @@
     onMoreEmoji,
     onReply,
     onCopy,
+    onSelectText,
     onEdit,
     onDelete,
   }: Props = $props();
@@ -35,9 +38,9 @@
   }}
   role="button"
   tabindex="-1"
-  aria-label="Close"
+  aria-label={t('chat.actionSheet.backdropAriaLabel')}
 ></div>
-<div class="action-sheet" role="dialog" aria-label="Message actions">
+<div class="action-sheet" role="dialog" aria-label={t('chat.actionSheet.dialogAriaLabel')}>
   <div class="sheet-handle"></div>
   <div class="sheet-reactions">
     {#each quickEmojis as emoji (emoji)}
@@ -46,26 +49,31 @@
     <button
       class="sheet-emoji more"
       onclick={onMoreEmoji}
-      aria-label="More emoji"
+      aria-label={t('chat.actionSheet.moreEmojiAriaLabel')}
     >
       <MoreHorizontal size={18} />
     </button>
   </div>
   <div class="sheet-actions">
     <button class="sheet-row" onclick={onReply}>
-      <Reply size={18} /><span>Reply</span>
+      <Reply size={18} /><span>{t('chat.actionSheet.reply')}</span>
     </button>
     <button class="sheet-row" onclick={onCopy}>
-      <Copy size={18} /><span>Copy</span>
+      <Copy size={18} /><span>{t('chat.actionSheet.copy')}</span>
     </button>
+    {#if !msg.fileDetails && msg.content}
+      <button class="sheet-row" onclick={onSelectText}>
+        <TextCursorInput size={18} /><span>{t('chat.actionSheet.selectText')}</span>
+      </button>
+    {/if}
     {#if msg.direction === "sent" && !msg.fileDetails}
       <button class="sheet-row" onclick={onEdit}>
-        <Pencil size={18} /><span>Edit</span>
+        <Pencil size={18} /><span>{t('chat.actionSheet.edit')}</span>
       </button>
     {/if}
     {#if msg.direction === "sent"}
       <button class="sheet-row danger" onclick={onDelete}>
-        <Trash2 size={18} /><span>Delete</span>
+        <Trash2 size={18} /><span>{t('chat.actionSheet.delete')}</span>
       </button>
     {/if}
   </div>

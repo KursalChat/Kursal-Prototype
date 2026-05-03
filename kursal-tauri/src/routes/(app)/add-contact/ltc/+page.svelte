@@ -8,7 +8,7 @@
   import { contactsState } from "$lib/state/contacts.svelte";
   import { goto } from "$app/navigation";
   import Button from "$lib/components/Button.svelte";
-  import Segmented from "$lib/components/settings/Segmented.svelte";
+  import { t } from "$lib/i18n";
   import {
     Download,
     Upload,
@@ -17,7 +17,6 @@
     FileCheckCorner,
   } from "lucide-svelte";
 
-  let mode = $state<"export" | "import">("export");
   let exporting = $state(false);
   let importing = $state(false);
   let importError = $state("");
@@ -28,21 +27,19 @@
   onMount(() => {
     unlistenPromises.push(
       listen<{ paths: string[] }>("tauri://drag-enter", () => {
-        if (mode === "import") dragging = true;
+        dragging = true;
       }),
     );
     unlistenPromises.push(
       listen<{ paths: string[] }>("tauri://drag-leave", () => {
-        if (mode === "import") dragging = false;
+        dragging = false;
       }),
     );
     unlistenPromises.push(
       listen<{ paths: string[] }>("tauri://drag-drop", async (event) => {
-        if (mode === "import") {
-          dragging = false;
-          if (event.payload.paths && event.payload.paths.length > 0) {
-            await handleImportPath(event.payload.paths[0]);
-          }
+        dragging = false;
+        if (event.payload.paths && event.payload.paths.length > 0) {
+          await handleImportPath(event.payload.paths[0]);
         }
       }),
     );
@@ -54,7 +51,7 @@
 
   async function handleImportPath(path: string) {
     if (!path.endsWith(".kursal")) {
-      importError = "Invalid file type. Please select a .kursal file.";
+      importError = t('addContact.ltc.invalidFileType');
       return;
     }
 
@@ -65,16 +62,14 @@
       const bytes = Array.from(bytesArr);
       const contact = await importLtc(bytes);
       contactsState.upsert(contact);
-      notifications.push("Long-term code imported", "success");
+      notifications.push(t('addContact.ltc.importSuccess'), "success");
       goto(`/chat/${contact.userId}`);
     } catch (e) {
       const errMsg = String(e);
       if (errMsg.includes("expired")) {
-        importError =
-          "This long-term code has expired. Ask your contact to generate a new one.";
+        importError = t('addContact.ltc.expiredError');
       } else {
-        importError =
-          "Invalid file. Please select a valid .kursal long-term code. " + errMsg;
+        importError = t('addContact.ltc.invalidFileError');
       }
       console.error("Import failed:", e);
     } finally {
@@ -87,28 +82,28 @@
     try {
       const bytes = await exportLtc();
       const path = await save({
-        title: "Save long-term code",
+        title: t('addContact.ltc.saveDialog'),
         defaultPath: "kursal-contact.kursal",
         filters: [
           {
-            name: "Kursal data file",
+            name: t('addContact.ltc.fileFilter'),
             extensions: ["kursal", "application/octet-stream"],
           },
         ],
       });
 
       if (!path) {
-        notifications.push("Save cancelled", "info");
+        notifications.push(t('addContact.ltc.saveCancelled'), "info");
         return;
       }
 
       await writeFile(path, new Uint8Array(bytes));
-      notifications.push("Long-term code ready", "success");
+      notifications.push(t('addContact.ltc.exportSuccess'), "success");
     } catch (e) {
       if (String(e).toLowerCase().includes("cancel")) {
-        notifications.push("Save cancelled", "info");
+        notifications.push(t('addContact.ltc.saveCancelled'), "info");
       } else {
-        notifications.push("Failed to export file", "error");
+        notifications.push(t('addContact.ltc.exportError'), "error");
       }
       console.error("Export failed:", e);
     } finally {
@@ -118,7 +113,7 @@
 
   async function handleImportSelectedFile(file: File) {
     if (!file.name.endsWith(".kursal")) {
-      importError = "Invalid file type. Please select a .kursal file.";
+      importError = t('addContact.ltc.invalidFileType');
       return;
     }
 
@@ -129,16 +124,14 @@
       const bytes = Array.from(new Uint8Array(buffer));
       const contact = await importLtc(bytes);
       contactsState.upsert(contact);
-      notifications.push("Long-term code imported", "success");
+      notifications.push(t('addContact.ltc.importSuccess'), "success");
       goto(`/chat/${contact.userId}`);
     } catch (e) {
       const errMsg = String(e);
       if (errMsg.includes("expired")) {
-        importError =
-          "This long-term code has expired. Ask your contact to generate a new one.";
+        importError = t('addContact.ltc.expiredError');
       } else {
-        importError =
-          "Invalid file. Please select a valid .kursal long-term code.";
+        importError = t('addContact.ltc.invalidFileError');
       }
       console.error("Import failed:", e);
     } finally {
@@ -183,7 +176,7 @@
       }
     } catch (err) {
       console.warn(
-        "Dialog picker unavailable, falling back to HTML input",
+        t('addContact.ltc.pickerUnavailable'),
         err,
       );
     }
@@ -222,91 +215,83 @@
 </script>
 
 <div class="ltc-flow">
-  <Segmented
-    value={mode}
-    options={[
-      { value: "export", label: "Export" },
-      { value: "import", label: "Import" },
-    ]}
-    onchange={(v) => (mode = v)}
-  />
-
-  {#if mode === "export"}
-    <section class="mode-content">
-      <div class="heading-row">
-        <div>
-          <h3>Create long-term code</h3>
-        </div>
+  <section class="mode-content">
+    <div class="heading-row">
+      <div>
+        <h3>{t('addContact.ltc.createTitle')}</h3>
       </div>
+    </div>
 
-      <p class="explanation">
-        Generate a .kursal file for long term, multi-contact sharing.
-      </p>
+    <p class="explanation">
+      {t('addContact.ltc.createDescription')}
+    </p>
 
-      <Button variant="primary" loading={exporting} onclick={handleExport}>
-        <Download size={14} />
-        Generate and save file
-      </Button>
+    <Button variant="primary" loading={exporting} onclick={handleExport}>
+      <Download size={14} />
+      {t('addContact.ltc.generateButton')}
+    </Button>
 
-      <div class="warning">
-        <ShieldAlert size={16} />
-        <div>
-          <strong>Keep this file private.</strong>
-          <p>
-            Anyone with it can request a secure session until it expires or
-            regenerate one.
-          </p>
-        </div>
+    <div class="warning">
+      <ShieldAlert size={16} />
+      <div>
+        <strong>{t('addContact.ltc.warningTitle')}</strong>
+        <p>
+          {t('addContact.ltc.warningDescription')}
+        </p>
       </div>
-    </section>
-  {:else}
-    <section class="mode-content">
-      <div class="heading-row">
-        <div>
-          <h3>Import long-term code</h3>
-          <p class="subtle">Drop a file here or browse for one.</p>
-        </div>
+    </div>
+  </section>
+
+  <div class="divider" role="separator" aria-hidden="true">
+    <span>{t('addContact.otp.orDivider')}</span>
+  </div>
+
+  <section class="mode-content">
+    <div class="heading-row">
+      <div>
+        <h3>{t('addContact.ltc.importTitle')}</h3>
+        <p class="subtle">{t('addContact.ltc.importSubtitle')}</p>
       </div>
+    </div>
 
-      <div
-        class="drop-zone"
-        class:dragging
-        ondragover={handleDragOver}
-        ondragleave={handleDragLeave}
-        ondrop={handleDrop}
-        onclick={handleDropZoneClick}
-        onkeydown={handleDropZoneKeydown}
-        role="button"
-        tabindex="0"
-        aria-label="Drop file or click to browse"
-      >
-        {#if importing}
-          <Upload size={28} />
-        {:else if dragging}
-          <FileCheckCorner size={28} />
-        {:else}
-          <FolderOpen size={28} />
-        {/if}
-        <p>{dragging ? "Release to import" : "Drop file here"}</p>
-        <span>or click to browse</span>
-      </div>
-
-      <input
-        type="file"
-        accept=".kursal"
-        onchange={handleImportFile}
-        bind:this={fileInput}
-        style="display: none"
-        disabled={importing}
-      />
-
-      {#if importError}
-        <div class="error-message">
-          {importError}
-        </div>
+    <div
+      class="drop-zone"
+      class:dragging
+      ondragover={handleDragOver}
+      ondragleave={handleDragLeave}
+      ondrop={handleDrop}
+      onclick={handleDropZoneClick}
+      onkeydown={handleDropZoneKeydown}
+      role="button"
+      tabindex="0"
+      aria-label={t('addContact.ltc.dropZoneAriaLabel')}
+    >
+      {#if importing}
+        <Upload size={28} />
+      {:else if dragging}
+        <FileCheckCorner size={28} />
+      {:else}
+        <FolderOpen size={28} />
       {/if}
-    </section>
-  {/if}
+      <p>{dragging ? t('addContact.ltc.releaseToImport') : t('addContact.ltc.dropFile')}</p>
+      <span>{t('addContact.ltc.orBrowse')}</span>
+    </div>
+
+    <input
+      type="file"
+      accept=".kursal"
+      onchange={handleImportFile}
+      bind:this={fileInput}
+      style="display: none"
+      disabled={importing}
+    />
+
+    {#if importError}
+      <div class="error-message">
+        {importError}
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -374,6 +359,26 @@
   .warning p {
     margin: 4px 0 0;
     color: var(--text-secondary);
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 0;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
   }
 
   .drop-zone {

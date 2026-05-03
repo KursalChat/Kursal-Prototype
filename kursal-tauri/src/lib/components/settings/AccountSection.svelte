@@ -40,6 +40,7 @@
   import TextInput from "./TextInput.svelte";
   import DndDial from "./DndDial.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import { t } from "$lib/i18n";
 
   let displayName = $state("You");
   let avatarBase64 = $state<string | null>(null);
@@ -93,10 +94,10 @@
     try {
       await broadcastProfile(nameToSave, avatarBytes);
       profileState.update(nameToSave, avatarBase64, avatarBytes);
-      notifications.push("Profile saved", "success");
+      notifications.push(t("settings.account.successProfileSaved"), "success");
     } catch (e) {
       console.error(e);
-      notifications.push("Saved locally but broadcast failed", "error");
+      notifications.push(t("settings.account.errorBroadcastFailed"), "error");
     } finally {
       savingProfile = false;
     }
@@ -122,11 +123,11 @@
 
   async function handleExportBackup() {
     if (exportPwd.length < 8) {
-      notifications.push("Password must be 8+ characters", "error");
+      notifications.push(t("settings.account.errorPasswordTooShort"), "error");
       return;
     }
     if (exportPwd !== exportPwd2) {
-      notifications.push("Passwords don't match", "error");
+      notifications.push(t("settings.account.errorPasswordMismatch"), "error");
       return;
     }
     exporting = true;
@@ -138,11 +139,14 @@
       });
       if (!path) return;
       await writeFile(path, new Uint8Array(bytes));
-      notifications.push("Backup saved", "success");
+      notifications.push(t("settings.account.successBackupSaved"), "success");
       resetExport();
     } catch (e) {
       console.error(e);
-      notifications.push(`Export failed: ${e}`, "error");
+      notifications.push(
+        t("settings.account.errorExport", { error: String(e) }),
+        "error",
+      );
     } finally {
       exporting = false;
     }
@@ -158,22 +162,24 @@
       pendingImportBytes = await readFile(picked as string);
       importOpen = true;
     } catch (e) {
-      notifications.push(`Read failed: ${e}`, "error");
+      notifications.push(
+        t("settings.account.errorReadFailed", { error: String(e) }),
+        "error",
+      );
     }
   }
 
   async function handleImportBackup() {
     if (!pendingImportBytes) return;
     if (importPwd.length === 0) {
-      notifications.push("Enter the backup password", "error");
+      notifications.push(t("settings.account.errorEnterPassword"), "error");
       return;
     }
     const confirmed = await confirmDialog({
-      title: "Replace current app data?",
-      message:
-        "This will overwrite your current identity, contacts, and messages with the backup. This cannot be undone.",
-      confirmLabel: "Replace everything",
-      cancelLabel: "Cancel",
+      title: t("settings.account.replaceConfirmTitle"),
+      message: t("settings.account.replaceConfirmMessage"),
+      confirmLabel: t("settings.account.replaceConfirmLabel"),
+      cancelLabel: t("common.cancel"),
       tone: "danger",
       holdMs: 5000,
     });
@@ -181,11 +187,17 @@
     importing = true;
     try {
       await importBackup(Array.from(pendingImportBytes), importPwd);
-      notifications.push(`Imported backup sucessfully`, "success");
+      notifications.push(
+        t("settings.account.successBackupImported"),
+        "success",
+      );
       resetImport();
     } catch (e) {
       console.error(e);
-      notifications.push(`Import failed: ${e}`, "error");
+      notifications.push(
+        t("settings.account.errorImport", { error: String(e) }),
+        "error",
+      );
     } finally {
       importing = false;
     }
@@ -208,7 +220,7 @@
       notifPermission = ok;
       if (!ok) {
         notifications.push(
-          "Permission denied. Enable in system settings.",
+          t("settings.account.errorPermissionDenied"),
           "error",
         );
       }
@@ -224,7 +236,7 @@
       notifPermission = await getPermission(true);
       if (!sent) {
         notifications.push(
-          "Permission denied. Enable in system settings.",
+          t("settings.account.errorPermissionDenied"),
           "error",
         );
       }
@@ -237,19 +249,22 @@
     if (!profileState.userId) return;
     try {
       await writeText(profileState.userId);
-      notifications.push("Peer ID copied", "success");
+      notifications.push(t("settings.account.successUserIdCopied"), "success");
     } catch (e) {
-      notifications.push(`Copy failed: ${e}`, "error");
+      notifications.push(
+        t("settings.account.errorCopyFailed", { error: String(e) }),
+        "error",
+      );
     }
   }
 </script>
 
 <div class="sec-head">
-  <h2>Account</h2>
-  <p>Manage your identity, backups, and notifications.</p>
+  <h2>{t("settings.account.heading")}</h2>
+  <p>{t("settings.account.description")}</p>
 </div>
 
-<SettingCard title="Profile">
+<SettingCard title={t("settings.account.profileCard")}>
   <div class="profile">
     <AvatarPicker onChange={handleAvatarChange}>
       {#snippet children(open)}
@@ -258,7 +273,7 @@
           <button
             type="button"
             class="avatar-edit"
-            aria-label="Change photo"
+            aria-label={t("settings.account.changePhotoAriaLabel")}
             onclick={open}
           >
             <Upload size={13} />
@@ -269,10 +284,11 @@
 
     <div class="profile-fields">
       <div class="field">
-        <span class="field-label">Display name</span>
+        <span class="field-label">{t("settings.account.displayNameLabel")}</span
+        >
         <TextInput
           bind:value={displayName}
-          placeholder="Your name"
+          placeholder={t("settings.account.displayNamePlaceholder")}
           width="260px"
         />
       </div>
@@ -285,7 +301,8 @@
             avatarBytes = null;
           }}
         >
-          <Trash2 size={12} /> Remove photo
+          <Trash2 size={12} />
+          {t("settings.account.removePhoto")}
         </button>
       {/if}
     </div>
@@ -293,26 +310,29 @@
 
   {#snippet footer()}
     {#if profileDirty}
-      <Button variant="secondary" onclick={resetProfile}>Cancel</Button>
+      <Button variant="secondary" onclick={resetProfile}
+        >{t("settings.account.cancel")}</Button
+      >
     {/if}
     <Button
       onclick={saveProfile}
       loading={savingProfile}
       disabled={!profileDirty}
     >
-      <Save size={13} /> Save
+      <Save size={13} />
+      {t("settings.account.save")}
     </Button>
   {/snippet}
 
   {#if profileState.userId}
     <div class="user-id-block">
       <div class="user-id-head">
-        <span class="user-id-label">User ID</span>
+        <span class="user-id-label">{t("settings.account.userIdLabel")}</span>
         <div class="user-id-actions">
           <button
             class="icon-btn"
             onclick={copyUserId}
-            aria-label="Copy user ID"
+            aria-label={t("settings.account.copyUserIdAriaLabel")}
           >
             <Copy size={13} />
           </button>
@@ -324,90 +344,98 @@
 </SettingCard>
 
 <SettingCard
-  title="Backup"
-  description="Encrypted snapshot of your identity, contacts, messages, and settings."
+  title={t("settings.account.backupCard")}
+  description={t("settings.account.backupDescription")}
 >
   <SettingRow
-    title="Export backup"
-    description="Saves a password-protected .kursal file."
+    title={t("settings.account.exportRow")}
+    description={t("settings.account.exportDescription")}
   >
     {#if exportOpen}
-      <Button variant="secondary" onclick={resetExport}>Cancel</Button>
+      <Button variant="secondary" onclick={resetExport}
+        >{t("settings.account.cancel")}</Button
+      >
     {:else}
       <Button variant="secondary" onclick={() => (exportOpen = true)}>
-        <Download size={13} /> Export
+        <Download size={13} />
+        {t("settings.account.exportButton")}
       </Button>
     {/if}
   </SettingRow>
   {#if exportOpen}
     <div class="pwd-block">
       <div class="field">
-        <span class="field-label">Password</span>
+        <span class="field-label">{t("settings.account.passwordLabel")}</span>
         <TextInput
           type="password"
           bind:value={exportPwd}
-          placeholder="At least 8 characters"
+          placeholder={t("settings.account.passwordPlaceholder")}
           width="260px"
         />
       </div>
       <div class="field">
-        <span class="field-label">Confirm</span>
+        <span class="field-label">{t("settings.account.confirmLabel")}</span>
         <TextInput
           type="password"
           bind:value={exportPwd2}
-          placeholder="Repeat password"
+          placeholder={t("settings.account.confirmPlaceholder")}
           width="260px"
         />
       </div>
       <p class="pwd-warn">
-        If you forget this password, the backup is unrecoverable.
+        {t("settings.account.passwordWarning")}
       </p>
       <div class="pwd-actions">
         <Button onclick={handleExportBackup} loading={exporting}>
-          <Save size={13} /> Encrypt &amp; save
+          <Save size={13} />
+          {t("settings.account.encryptAndSave")}
         </Button>
       </div>
     </div>
   {/if}
 
   <SettingRow
-    title="Import backup"
-    description="Restore from a previous .kursal file. Replaces current identity."
+    title={t("settings.account.importRow")}
+    description={t("settings.account.importDescription")}
   >
     {#if importOpen}
-      <Button variant="secondary" onclick={resetImport}>Cancel</Button>
+      <Button variant="secondary" onclick={resetImport}
+        >{t("settings.account.cancel")}</Button
+      >
     {:else}
       <Button variant="secondary" onclick={pickImportFile}>
-        <FolderOpen size={13} /> Choose file
+        <FolderOpen size={13} />
+        {t("settings.account.chooseFile")}
       </Button>
     {/if}
   </SettingRow>
   {#if importOpen}
     <div class="pwd-block">
       <div class="field">
-        <span class="field-label">Password</span>
+        <span class="field-label">{t("settings.account.passwordLabel")}</span>
         <TextInput
           type="password"
           bind:value={importPwd}
-          placeholder="Backup password"
+          placeholder={t("settings.account.backupPasswordPlaceholder")}
           width="260px"
         />
       </div>
       <div class="pwd-actions">
         <Button onclick={handleImportBackup} loading={importing}>
-          <Upload size={13} /> Decrypt &amp; restore
+          <Upload size={13} />
+          {t("settings.account.decryptAndRestore")}
         </Button>
       </div>
     </div>
   {/if}
 </SettingCard>
 
-<SettingCard title="Notifications">
+<SettingCard title={t("settings.account.notificationsCard")}>
   <SettingRow
-    title="System permission"
+    title={t("settings.account.systemPermissionRow")}
     description={notifPermission
-      ? "Kursal can show desktop notifications."
-      : "Kursal is not allowed to show desktop notifications."}
+      ? t("settings.account.permissionGranted")
+      : t("settings.account.permissionDenied")}
   >
     <div class="notif-perm">
       <span class="perm-dot" data-on={notifPermission}></span>
@@ -417,38 +445,40 @@
           onclick={handleTestNotification}
           loading={sendingTest}
         >
-          <BellRing size={13} /> Send test
+          <BellRing size={13} />
+          {t("settings.account.sendTestButton")}
         </Button>
       {:else}
         <Button onclick={handleEnableNotifications} loading={requestingPerm}>
-          <Bell size={13} /> Enable
+          <Bell size={13} />
+          {t("settings.account.enableButton")}
         </Button>
       {/if}
     </div>
   </SettingRow>
   <SettingRow
-    title="Message preview"
-    description="What system notifications show when a message arrives."
+    title={t("settings.account.messagePreviewRow")}
+    description={t("settings.account.messagePreviewDescription")}
   >
     <Segmented
       value={preview}
       options={[
-        { value: "content", label: "Full" },
-        { value: "sender", label: "Sender" },
-        { value: "generic", label: "Generic" },
-        { value: "none", label: "Off" },
+        { value: "content", label: t("settings.account.previewFull") },
+        { value: "sender", label: t("settings.account.previewSender") },
+        { value: "generic", label: t("settings.account.previewGeneric") },
+        { value: "none", label: t("settings.account.previewOff") },
       ]}
       onchange={updatePreview}
       size="sm"
     />
   </SettingRow>
   <SettingRow
-    title="Do not disturb"
-    description="Mute notifications during a scheduled window."
+    title={t("settings.account.doNotDisturbRow")}
+    description={t("settings.account.doNotDisturbDescription")}
   >
     <Toggle
       checked={dnd.enabled}
-      ariaLabel="Enable do not disturb"
+      ariaLabel={t("settings.account.doNotDisturbAriaLabel")}
       onchange={(v) => updateDnd({ enabled: v })}
     />
   </SettingRow>

@@ -6,7 +6,7 @@
 use crate::{
     KursalError, Result,
     identity::generators::{generate_kyber_prekey, generate_prekey, generate_signed_prekey},
-    storage::SharedDatabase,
+    storage::{SharedDatabase, get_local_address},
 };
 use libsignal_protocol::{
     DeviceId, GenericSignedPreKey, IdentityKey, IdentityKeyStore, KyberPreKeyId, PreKeyBundle,
@@ -181,9 +181,12 @@ pub async fn session_initiate(
     )
     .map_err(|err| KursalError::Storage(err.to_string()))?;
 
+    let local_address = get_local_address(&*db.0.lock().await)?;
+
     let mut rng = OsRng.unwrap_err();
     process_prekey_bundle(
         remote_address,
+        &local_address,
         &mut db.clone(),
         &mut db.clone(),
         &bundle,

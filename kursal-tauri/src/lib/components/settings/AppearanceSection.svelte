@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Sun, Moon, Monitor, Check } from "lucide-svelte";
+  import { t, locale, LOCALES, type Locale } from '$lib/i18n';
   import { platform } from "@tauri-apps/plugin-os";
   import {
     appearanceState,
@@ -11,6 +12,7 @@
   import SettingCard from "./SettingCard.svelte";
   import SettingRow from "./SettingRow.svelte";
   import Segmented from "./Segmented.svelte";
+  import Select from "./Select.svelte";
   import Toggle from "./Toggle.svelte";
 
   let autostart = $state(false);
@@ -48,11 +50,11 @@
       else await disable();
       autostart = enabled;
       notifications.push(
-        enabled ? "Auto-start enabled" : "Auto-start disabled",
+        enabled ? t('settings.appearance.successAutoStartEnabled') : t('settings.appearance.successAutoStartDisabled'),
         "success",
       );
     } catch (e) {
-      notifications.push(`Auto-start failed: ${e}`, "error");
+      notifications.push(t('settings.appearance.errorAutoStart', { error: String(e) }), "error");
     } finally {
       autostartBusy = false;
     }
@@ -60,40 +62,50 @@
 </script>
 
 <div class="sec-head">
-  <h2>Appearance</h2>
-  <p>Theme, text size, and system integration.</p>
+  <h2>{t('settings.appearance.heading')}</h2>
+  <p>{t('settings.appearance.description')}</p>
 </div>
 
-<SettingCard title="Display">
-  <SettingRow title="Theme" description="Light, dark, or follow system.">
+<SettingCard title={t('settings.appearance.displayCard')}>
+  <SettingRow title={t('settings.appearance.themeRow')} description={t('settings.appearance.themeDescription')}>
     <Segmented
       value={appearanceState.theme}
       options={[
-        { value: "light", label: "Light", icon: Sun },
-        { value: "dark", label: "Dark", icon: Moon },
-        { value: "system", label: "System", icon: Monitor },
+        { value: "light", label: t('settings.appearance.themeLight'), icon: Sun },
+        { value: "dark", label: t('settings.appearance.themeDark'), icon: Moon },
+        { value: "system", label: t('settings.appearance.themeSystem'), icon: Monitor },
       ]}
       onchange={(v) => appearanceState.setTheme(v)}
     />
   </SettingRow>
-  <SettingRow title="Text size" description="Adjust interface density.">
+  <SettingRow title={t('settings.appearance.textSizeRow')} description={t('settings.appearance.textSizeDescription')}>
     <Segmented
       value={appearanceState.zoom}
       options={[
-        { value: "smaller", label: "Small" },
-        { value: "normal", label: "Normal" },
-        { value: "larger", label: "Large" },
+        { value: "smaller", label: t('settings.appearance.textSizeSmall') },
+        { value: "normal", label: t('settings.appearance.textSizeNormal') },
+        { value: "larger", label: t('settings.appearance.textSizeLarge') },
       ]}
       onchange={(v) => appearanceState.setZoom(v)}
     />
   </SettingRow>
 </SettingCard>
 
+<SettingCard title={t('settings.appearance.languageCard')}>
+  <SettingRow title={t('settings.appearance.languageRow')} description={t('settings.appearance.languageDescription')}>
+    <Select
+      value={locale.current}
+      options={LOCALES.map((l: { id: Locale; label: string }) => ({ value: l.id, label: l.label }))}
+      onchange={(v) => locale.set(v as Locale)}
+    />
+  </SettingRow>
+</SettingCard>
+
 <SettingCard
-  title="Color theme"
-  description="Tinted background and accent. Classic keeps the default look."
+  title={t('settings.appearance.colorThemeCard')}
+  description={t('settings.appearance.colorThemeDescription')}
 >
-  <div class="tiles" role="radiogroup" aria-label="Color theme">
+  <div class="tiles" role="radiogroup" aria-label={t('settings.appearance.colorThemeAriaLabel')}>
     {#each PALETTES as p}
       {@const active = appearanceState.palette === p.id}
       <button
@@ -119,16 +131,16 @@
 </SettingCard>
 
 {#if autostartSupported}
-  <SettingCard title="System">
+  <SettingCard title={t('settings.appearance.systemCard')}>
     <SettingRow
-      title="Start with system"
-      description="Launch Kursal automatically when you log in."
+      title={t('settings.appearance.autoStartRow')}
+      description={t('settings.appearance.autoStartDescription')}
     >
       <Toggle
         checked={autostart}
         disabled={!autostartReady || autostartBusy}
         onchange={toggleAutostart}
-        ariaLabel="Start with system"
+        ariaLabel={t('settings.appearance.autoStartAriaLabel')}
       />
     </SettingRow>
   </SettingCard>

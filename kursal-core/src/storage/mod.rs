@@ -12,10 +12,10 @@ use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use async_trait::async_trait;
 use hkdf::Hkdf;
 use libsignal_protocol::{
-    Direction, GenericSignedPreKey, IdentityChange, IdentityKey, IdentityKeyPair, IdentityKeyStore,
-    KyberPreKeyId, KyberPreKeyRecord, KyberPreKeyStore, PreKeyId, PreKeyRecord, PreKeyStore,
-    ProtocolAddress, PublicKey, SessionRecord, SessionStore, SignalProtocolError, SignedPreKeyId,
-    SignedPreKeyRecord, SignedPreKeyStore,
+    DeviceId, Direction, GenericSignedPreKey, IdentityChange, IdentityKey, IdentityKeyPair,
+    IdentityKeyStore, KyberPreKeyId, KyberPreKeyRecord, KyberPreKeyStore, PreKeyId, PreKeyRecord,
+    PreKeyStore, ProtocolAddress, PublicKey, SessionRecord, SessionStore, SignalProtocolError,
+    SignedPreKeyId, SignedPreKeyRecord, SignedPreKeyStore,
 };
 use rand::{TryRngCore, rngs::OsRng};
 use redb::{ReadableDatabase, ReadableTable, TableDefinition};
@@ -669,6 +669,15 @@ pub fn get_local_user_id(db: &Database) -> Result<UserId> {
     let user_id: [u8; 32] = Sha256::digest(&identity_pub_key).into();
 
     Ok(UserId(user_id))
+}
+
+pub fn get_local_address(db: &Database) -> Result<ProtocolAddress> {
+    let user_id = get_local_user_id(db)?;
+
+    Ok(ProtocolAddress::new(
+        hex::encode(user_id.0),
+        DeviceId::new(1u8).unwrap(),
+    ))
 }
 
 pub fn get_dilithium_pub(db: &Database) -> Result<Vec<u8>> {

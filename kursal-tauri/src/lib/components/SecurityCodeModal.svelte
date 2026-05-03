@@ -4,6 +4,7 @@
   import { contactsState } from '$lib/state/contacts.svelte';
   import { notifications } from '$lib/state/notifications.svelte';
   import Button from './Button.svelte';
+  import { t } from '$lib/i18n';
 
   let {
     contactId,
@@ -34,7 +35,7 @@
     try {
       await confirmSecurityCode(contactId);
       contactsState.markVerified(contactId);
-      notifications.push('Contact verified!', 'success');
+      notifications.push(t('securityCode.successVerified'), 'success');
       onClose();
     } catch (e) {
       error = String(e);
@@ -75,19 +76,18 @@
     if (e.key === 'Escape') onClose();
   }}
 >
-  <div class="modal" in:scale role="dialog" aria-modal="true" tabindex="-1">
-    <h2>Security Code Verification</h2>
+  <div class="modal" in:scale role="dialog" aria-modal="true" aria-label={t('securityCode.heading')} tabindex="-1">
+    <h2>{t('securityCode.heading')}</h2>
 
     {#if error}
       <div class="error">{error}</div>
     {/if}
 
     {#if loading}
-      <div class="loading">Loading security code...</div>
+      <div class="loading">{t('securityCode.loading')}</div>
     {:else if code}
       <p class="explanation">
-        Read this code out loud with your contact over a separate channel.
-        If the codes match, tap Confirm.
+        {t('securityCode.explanation')}
       </p>
 
       <!-- Display code in 8 cells, 4 per row -->
@@ -98,16 +98,16 @@
       </div>
 
       <Button variant="secondary" onclick={copyCode}>
-        Copy Code
+        {t('securityCode.copyButton')}
       </Button>
 
       {#if contactVerified}
-        <Button variant="primary" onclick={onClose}>Close</Button>
+        <Button variant="primary" onclick={onClose}>{t('securityCode.closeButton')}</Button>
       {:else}
         <Button variant="primary" loading={confirming} onclick={handleConfirm}>
-          Confirm — codes match
+          {t('securityCode.confirmButton')}
         </Button>
-        <button class="link" onclick={onClose}>Do this later</button>
+        <button class="link" onclick={onClose}>{t('securityCode.doLaterButton')}</button>
       {/if}
     {/if}
   </div>

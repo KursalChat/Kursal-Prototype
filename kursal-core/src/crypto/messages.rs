@@ -1,8 +1,7 @@
 use crate::{
     KursalError, Result,
-    api::get_protocol_addr,
     crypto::PreKeyBundleData,
-    storage::{SharedDatabase, get_local_user_id},
+    storage::{SharedDatabase, get_local_address},
 };
 use libsignal_protocol::{
     PreKeySignalMessage, ProtocolAddress, PublicKey as SignalPublicKey, SignalMessage,
@@ -23,13 +22,13 @@ pub async fn message_send(
     remote_address: &ProtocolAddress,
     plaintext: &[u8],
 ) -> Result<Vec<u8>> {
-    let local_user_id = get_local_user_id(&*db.0.lock().await)?;
+    let local_address = get_local_address(&*db.0.lock().await)?;
 
     let mut rng = OsRng.unwrap_err();
     let encrypted = message_encrypt(
         plaintext,
         remote_address,
-        &get_protocol_addr(local_user_id.0),
+        &local_address,
         &mut db.clone(),
         &mut db.clone(),
         SystemTime::now(),
@@ -46,11 +45,14 @@ pub async fn message_receive(
     remote_address: &ProtocolAddress,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>> {
+    let local_address = get_local_address(&*db.0.lock().await)?;
+
     if let Ok(msg) = SignalMessage::try_from(ciphertext) {
         let mut rng = OsRng.unwrap_err();
         let decrypted = message_decrypt_signal(
             &msg,
             remote_address,
+            &local_address,
             &mut db.clone(),
             &mut db.clone(),
             &mut rng,
@@ -60,13 +62,11 @@ pub async fn message_receive(
 
         Ok(decrypted)
     } else if let Ok(msg) = PreKeySignalMessage::try_from(ciphertext) {
-        let local_user_id = get_local_user_id(&*db.0.lock().await)?;
-
         let mut rng = OsRng.unwrap_err();
         let decrypted = message_decrypt_prekey(
             &msg,
             remote_address,
-            &get_protocol_addr(local_user_id.0),
+            &local_address,
             &mut db.clone(),
             &mut db.clone(),
             &mut db.clone(),

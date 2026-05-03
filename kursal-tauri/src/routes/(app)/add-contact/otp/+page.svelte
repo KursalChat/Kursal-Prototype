@@ -1,6 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { generateOtp, publishOtp, fetchOtp } from "$lib/api/otp";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { goto } from "$app/navigation";
@@ -17,8 +17,8 @@
     ScanLine,
   } from "lucide-svelte";
   import { isMobile } from "$lib/api/window";
+  import { t } from "$lib/i18n";
 
-  let mode = $state<"share" | "receive">("share");
   let shareView = $state<"words" | "qr">("words");
   let otp = $state<string | null>(null);
   let qrDataUrl = $state<string | null>(null);
@@ -27,8 +27,9 @@
   let fetchStatus = $state<"idle" | "loading" | "error">("idle");
   let fetchError = $state("");
   let expiresAt = $state<number | null>(null);
-  let countdown = $state(600); // 10 min in seconds
+  let countdown = $state(600);
   let countdownInterval: ReturnType<typeof setInterval> | null = null;
+  let receiveSection = $state<HTMLElement | null>(null);
   const storageKey = "kursal_add_contact_otp";
 
   type PersistedOtpState = {
@@ -108,7 +109,7 @@
       status = "waiting";
       persistOtpState();
     } catch (e) {
-      notifications.push("Failed to generate code", "error");
+      notifications.push(t('addContact.otp.generateError'), "error");
       console.error("Generate OTP failed:", e);
       status = "idle";
     }
@@ -137,7 +138,7 @@
     try {
       const contact = await fetchOtp(inputOtp.trim());
       contactsState.upsert(contact);
-      notifications.push("Contact added!", "success");
+      notifications.push(t('addContact.otp.contactAdded'), "success");
       fetchStatus = "idle";
       goto("/chat/" + contact.userId);
     } catch (e) {
@@ -151,7 +152,7 @@
     if (otp) {
       try {
         await navigator.clipboard.writeText(otp);
-        notifications.push("Code copied!", "success");
+        notifications.push(t('addContact.otp.codeCopied'), "success");
       } catch (e) {
         console.error("Failed to copy:", e);
       }
@@ -169,9 +170,6 @@
     }
   }
 
-  // Barcode-scanner plugin is mobile-only (iOS/Android). Guard at call site
-  // so the dynamic import never runs on desktop, where the plugin is not
-  // registered and would throw at invoke time.
   async function scanQr() {
     if (!isMobile) return;
     try {
@@ -183,7 +181,7 @@
           ? initialPerm
           : ((await requestPermissions()) as string);
       if (perm !== "granted") {
-        notifications.push("Camera permission denied", "error");
+        notifications.push(t('addContact.otp.cameraPermissionDenied'), "error");
         return;
       }
       const result = await scan({
@@ -197,7 +195,7 @@
     } catch (e) {
       const msg = String(e);
       if (!msg.toLowerCase().includes("cancel")) {
-        notifications.push("QR scan failed", "error");
+        notifications.push(t('addContact.otp.qrScanError'), "error");
         console.error("QR scan failed:", e);
       }
     }
@@ -207,8 +205,10 @@
     const params = new URLSearchParams(window.location.search);
     const receiveCode = params.get("receive");
     if (receiveCode) {
-      mode = "receive";
       inputOtp = receiveCode;
+      tick().then(() => {
+        receiveSection?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     }
 
     if (browser) {
@@ -246,162 +246,154 @@
 </script>
 
 <div class="otp-flow">
-  <Segmented
-    value={mode}
-    options={[
-      { value: "share", label: "Share" },
-      { value: "receive", label: "Receive" },
-    ]}
-    onchange={(v) => (mode = v)}
-  />
-
-  {#if mode === "share"}
-    <section class="mode-content">
-      <div class="heading-row">
-        <div>
-          <h3>Share code</h3>
-          <p class="subtle">
-            This one-time code expires automatically after 10 minutes.
-          </p>
-        </div>
-
-        {#if otp && status === "waiting"}
-          <span class="timer-pill">Expiring in {formattedTime}</span>
-        {/if}
+  <section class="mode-content">
+    <div class="heading-row">
+      <div>
+        <h3>{t('addContact.otp.shareTitle')}</h3>
+        <p class="subtle">
+          {t('addContact.otp.shareSubtitle')}
+        </p>
       </div>
 
       {#if otp && status === "waiting"}
-        <p class="explanation">
-          Send this to your contact through a secure channel.
-        </p>
+        <span class="timer-pill">{t('addContact.otp.expiringIn', { time: formattedTime })}</span>
+      {/if}
+    </div>
 
-        <Segmented
-          size="sm"
-          value={shareView}
-          options={[
-            { value: "words", label: "Words", icon: Type },
-            { value: "qr", label: "QR", icon: QrCode },
-          ]}
-          onchange={(v) => (shareView = v)}
-        />
+    {#if otp && status === "waiting"}
+      <p class="explanation">
+        {t('addContact.otp.sendInstructions')}
+      </p>
 
-        {#if shareView === "words"}
-          <div
-            class="code-display"
-            role="group"
-            aria-label="One-time passphrase words"
-          >
-            <div class="code-grid">
-              {#each otp.split(/\s+/).filter((s) => s.length > 0) as word}
-                <div class="code-word">
-                  <span class="word-value">{word}</span>
-                </div>
-              {/each}
-            </div>
+      <Segmented
+        size="sm"
+        value={shareView}
+        options={[
+          { value: "words", label: t('addContact.otp.wordsLabel'), icon: Type },
+          { value: "qr", label: t('addContact.otp.qrLabel'), icon: QrCode },
+        ]}
+        onchange={(v) => (shareView = v)}
+      />
+
+      {#if shareView === "words"}
+        <div
+          class="code-display"
+          role="group"
+          aria-label={t('addContact.otp.passphraseAriaLabel')}
+        >
+          <div class="code-grid">
+            {#each otp.split(/\s+/).filter((s) => s.length > 0) as word}
+              <div class="code-word">
+                <span class="word-value">{word}</span>
+              </div>
+            {/each}
           </div>
-        {:else}
-          <div class="qr-card">
-            {#if qrDataUrl}
-              <img
-                class="qr-image"
-                src={qrDataUrl}
-                alt="QR code containing the one-time contact phrase"
-              />
-            {:else}
-              <p class="qr-fallback">
-                QR preview unavailable, use the words view.
-              </p>
-            {/if}
-          </div>
-        {/if}
-
-        <div class="action-row">
-          <Button variant="secondary" onclick={copyCode}>
-            <Copy size={14} />
-            Copy Code
-          </Button>
-          <Button variant="secondary" onclick={handleGenerateCode}>
-            <RefreshCw size={14} />
-            Regenerate
-          </Button>
         </div>
       {:else}
-        <p class="explanation">
-          Recommended method for adding a contact. If you are on the same
-          network on in Bluetooth-range, consider using the <b>Nearby</b> tab.
-        </p>
-        <Button
-          variant="primary"
-          loading={status === "generating"}
-          onclick={handleGenerateCode}
-        >
-          Generate Code
-        </Button>
-        <p class="help-text">
-          After generation, you can switch between words and QR.
-        </p>
-      {/if}
-    </section>
-  {:else}
-    <section class="mode-content">
-      <div class="heading-row">
-        <div>
-          <h3>Enter code</h3>
-          <p class="subtle">Paste or type the 8 words from your contact.</p>
-        </div>
-      </div>
-
-      <div class="input-wrap">
-        <textarea
-          bind:value={inputOtp}
-          placeholder="example: maple echo ribbon solar ..."
-          rows="3"
-          disabled={fetchStatus === "loading"}
-          autocapitalize="off"
-          spellcheck="false"
-        ></textarea>
-        <div class="input-actions">
-          {#if isMobile}
-            <button
-              class="inline-action"
-              type="button"
-              onclick={scanQr}
-              title="Scan QR code"
-            >
-              <ScanLine size={14} />
-              Scan
-            </button>
+        <div class="qr-card">
+          {#if qrDataUrl}
+            <img
+              class="qr-image"
+              src={qrDataUrl}
+              alt={t('addContact.otp.qrCodeAlt')}
+            />
+          {:else}
+            <p class="qr-fallback">
+              {t('addContact.otp.qrUnavailable')}
+            </p>
           {/if}
+        </div>
+      {/if}
+
+      <div class="action-row">
+        <Button variant="secondary" onclick={copyCode}>
+          <Copy size={14} />
+          {t('addContact.otp.copyButton')}
+        </Button>
+        <Button variant="secondary" onclick={handleGenerateCode}>
+          <RefreshCw size={14} />
+          {t('addContact.otp.regenerateButton')}
+        </Button>
+      </div>
+    {:else}
+      <p class="explanation">
+        {t('addContact.otp.recommendedMethod')}
+      </p>
+      <Button
+        variant="primary"
+        loading={status === "generating"}
+        onclick={handleGenerateCode}
+      >
+        {t('addContact.otp.generateButton')}
+      </Button>
+      <p class="help-text">
+        {t('addContact.otp.helpText')}
+      </p>
+    {/if}
+  </section>
+
+  <div class="divider" role="separator" aria-hidden="true">
+    <span>{t('addContact.otp.orDivider')}</span>
+  </div>
+
+  <section class="mode-content" bind:this={receiveSection}>
+    <div class="heading-row">
+      <div>
+        <h3>{t('addContact.otp.receiveTitle')}</h3>
+        <p class="subtle">{t('addContact.otp.receiveSubtitle')}</p>
+      </div>
+    </div>
+
+    <div class="input-wrap">
+      <textarea
+        bind:value={inputOtp}
+        placeholder={t('addContact.otp.inputPlaceholder')}
+        rows="3"
+        disabled={fetchStatus === "loading"}
+        autocapitalize="off"
+        spellcheck="false"
+      ></textarea>
+      <div class="input-actions">
+        {#if isMobile}
           <button
             class="inline-action"
             type="button"
-            onclick={pasteCode}
-            title="Paste"
+            onclick={scanQr}
+            title={t('addContact.otp.scanButton')}
           >
-            <ClipboardPaste size={14} />
-            Paste
+            <ScanLine size={14} />
+            {t('addContact.otp.scanLabel')}
           </button>
-        </div>
+        {/if}
+        <button
+          class="inline-action"
+          type="button"
+          onclick={pasteCode}
+          title={t('addContact.otp.pasteButton')}
+        >
+          <ClipboardPaste size={14} />
+          {t('addContact.otp.pasteLabel')}
+        </button>
       </div>
+    </div>
 
-      {#if fetchError}
-        <div class="error-message">
-          {fetchError.includes("expired")
-            ? "This contact code has expired. Ask for a new one."
-            : "Invalid code. Make sure you copied it correctly."}
-        </div>
-      {/if}
+    {#if fetchError}
+      <div class="error-message">
+        {fetchError.includes("expired")
+          ? t('addContact.otp.expiredError')
+          : t('addContact.otp.invalidError')}
+      </div>
+    {/if}
 
-      <Button
-        variant="primary"
-        loading={fetchStatus === "loading"}
-        disabled={!inputOtp.trim()}
-        onclick={handleFetchOtp}
-      >
-        Connect Contact
-      </Button>
-    </section>
-  {/if}
+    <Button
+      variant="primary"
+      loading={fetchStatus === "loading"}
+      disabled={!inputOtp.trim()}
+      onclick={handleFetchOtp}
+    >
+      {t('addContact.otp.connectButton')}
+    </Button>
+  </section>
 </div>
 
 <style>
@@ -518,6 +510,26 @@
     width: auto;
     min-width: 160px;
     flex: 1 1 200px;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 0;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
   }
 
   .input-wrap {

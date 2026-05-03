@@ -112,22 +112,20 @@ export interface ResolvedReceivePath {
 export async function pickFileForReceive(
   filename: string,
 ): Promise<ResolvedReceivePath | null> {
+  const safeName = sanitizeFilename(filename);
   if (OS == "android") {
-    // Android SAF: we can't always use save() reliably. Write to app cache, then
-    // let the user share out once done (via platform-level share) — see notes below.
-    // For now, write directly to app cache; backend fills in.
     const backendPath = await writeBytesToAppCache(
       new Uint8Array(0),
-      filename,
+      safeName,
       "recv",
     );
     return { backendPath, deferredTargetUri: null };
   }
 
-  const savePath = await save({ defaultPath: filename });
+  const savePath = await save({ defaultPath: safeName });
   const raw = extractPath(savePath);
   if (!raw) return null;
-  return await resolveReceiveSavePath(raw, filename);
+  return await resolveReceiveSavePath(raw, safeName);
 }
 
 export async function prepareOfferSourcePath(

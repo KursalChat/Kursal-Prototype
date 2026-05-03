@@ -2,12 +2,8 @@
   import { onMount } from "svelte";
   import { platform } from "@tauri-apps/plugin-os";
   import { Network } from "lucide-svelte";
+  import { t } from '$lib/i18n';
   import { settingsState } from "$lib/state/settings.svelte";
-
-  const LINE_1 = "No server to hack.";
-  const LINE_2 = "No database to leak.";
-  const LINE_3 = "We don't store your messages. We never see them.";
-  const BUTTON_LABEL = "Next";
 
   const SLOT_COUNT = 3;
 
@@ -131,10 +127,10 @@
               class:dying={powerDying && !poweredDown}
               class:dead={poweredDown}
               >{poweredDown
-                ? "OFFLINE"
+                ? t('onboarding.screen4.serverOffline')
                 : powerDying
-                  ? "ERROR · 0xDEAD"
-                  : "ONLINE"}</span
+                  ? t('onboarding.screen4.serverError')
+                  : t('onboarding.screen4.serverOnline')}</span
             >
           </div>
           {#each slots as i}
@@ -192,7 +188,7 @@
   <div class="text-block">
     <div class="line large" class:show={showLine1}>
       {#if showLine1}
-        {#each chars(LINE_1) as { ch, delay }}
+        {#each chars(t('onboarding.screen4.line1')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -202,7 +198,7 @@
 
     <div class="line large" class:show={showLine2}>
       {#if showLine2}
-        {#each chars(LINE_2) as { ch, delay }}
+        {#each chars(t('onboarding.screen4.line2')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -212,7 +208,7 @@
 
     <div class="line accent" class:show={showLine3}>
       {#if showLine3}
-        {#each chars(LINE_3) as { ch, delay }}
+        {#each chars(t('onboarding.screen4.line3')) as { ch, delay }}
           <span class="char" style="animation-delay: {delay}ms"
             >{ch === " " ? "\u00A0" : ch}</span
           >
@@ -227,18 +223,18 @@
         <Network size={18} strokeWidth={2.2} />
       </div>
       <div class="relay-text">
-        <div class="relay-title">Contribute to the relay swarm</div>
-        <div class="relay-desc">Help other users to connect to each other.</div>
+        <div class="relay-title">{t('onboarding.screen4.relayCardTitle')}</div>
+        <div class="relay-desc">{t('onboarding.screen4.relayCardDescription')}</div>
       </div>
       <div class="relay-toggle-wrap">
         {#if !relayEnabled}
-          <span class="relay-sad" aria-hidden="true">:(</span>
+          <span class="relay-sad" aria-hidden="true">{t('onboarding.screen4.relaySadFace')}</span>
         {/if}
         <button
           type="button"
           role="switch"
           aria-checked={relayEnabled}
-          aria-label="Contribute to the relay swarm"
+          aria-label={t('onboarding.screen4.relayCardTitle')}
           class="relay-toggle"
           data-on={relayEnabled}
           tabindex={showRelay ? 0 : -1}
@@ -257,7 +253,7 @@
       disabled={saving}
       tabindex={showButton ? 0 : -1}
     >
-      <span>{BUTTON_LABEL}</span>
+      <span>{t('onboarding.screen4.cta')}</span>
       <svg
         width="18"
         height="18"

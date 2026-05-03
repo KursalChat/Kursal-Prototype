@@ -6,7 +6,11 @@
     Trash2,
     Copy,
     TriangleAlert,
+    Fingerprint,
   } from "lucide-svelte";
+  import { checkStatus } from "@tauri-apps/plugin-biometric";
+  import { isMobile } from "$lib/api/window";
+  import { prefsState } from "$lib/state/prefs.svelte";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { rotatePeerId } from "$lib/api/identity";
   import {
@@ -30,6 +34,7 @@
   import Segmented from "./Segmented.svelte";
   import Select from "./Select.svelte";
   import { setContactBlocked } from "$lib/api/contacts";
+  import { t } from "$lib/i18n";
 
   let rotating = $state(false);
   const rotationInterval = $derived(settingsState.peerRotation);
@@ -42,10 +47,49 @@
   let clearing = $state(false);
   let deleting = $state(false);
 
+  let biometricAvailable = $state(false);
+  const appLockEnabled = $derived(prefsState.appLockBiometric);
+
   onMount(async () => {
     void settingsState.load();
+    prefsState.init();
     await reloadBlocked();
+    if (isMobile) {
+      try {
+        const status = await checkStatus();
+        biometricAvailable = status.isAvailable;
+      } catch (e) {
+        console.error("biometric status check failed", e);
+        biometricAvailable = false;
+      }
+    }
   });
+
+  async function handleAppLockChange(value: boolean) {
+    if (value && isMobile) {
+      try {
+        const { authenticate } = await import("@tauri-apps/plugin-biometric");
+        await authenticate(t("biometricLock.enableReason"), {
+          allowDeviceCredential: true,
+          cancelTitle: t("biometricLock.cancelTitle"),
+          fallbackTitle: t("biometricLock.fallbackTitle"),
+          title: t("biometricLock.androidTitle"),
+          subtitle: t("biometricLock.androidSubtitle"),
+          confirmationRequired: false,
+        });
+      } catch (e) {
+        notifications.push(t("settings.privacy.errorAppLockEnable"), "error");
+        return;
+      }
+    }
+    prefsState.setAppLockBiometric(value);
+    notifications.push(
+      value
+        ? t("settings.privacy.successAppLockEnabled")
+        : t("settings.privacy.successAppLockDisabled"),
+      "success",
+    );
+  }
 
   async function reloadBlocked() {
     blockedLoading = true;
@@ -60,12 +104,10 @@
 
   async function handleRotate() {
     const ok = await confirmDialog({
-      title: "Rotate peer ID?",
-      message:
-        "A new transport identity will be generated and broadcast to your contacts.",
-      detail:
-        "Only do this if you suspect your current peer ID is compromised, or you want to reset how the network finds you. Existing conversations are preserved.",
-      confirmLabel: "Rotate now",
+      title: t('settings.privacy.rotatePeerIdTitle'),
+      message: t('settings.privacy.rotatePeerIdMessage'),
+      detail: t('settings.privacy.rotatePeerIdDetail'),
+      confirmLabel: t('settings.privacy.rotatePeerIdConfirm'),
       tone: "warning",
     });
     if (!ok) return;
@@ -73,9 +115,9 @@
     try {
       await rotatePeerId();
       await profileState.refreshPeerId();
-      notifications.push("Peer ID rotated", "success");
+      notifications.push(t('settings.privacy.successPeerIdRotated'), "success");
     } catch (e) {
-      notifications.push("Failed to rotate peer ID", "error");
+      notifications.push(t('settings.privacy.errorPeerIdRotate'), "error");
     } finally {
       rotating = false;
     }
@@ -84,7 +126,7 @@
   async function handleIntervalChange(value: PeerRotationInterval) {
     try {
       await settingsState.setPeerRotation(value);
-      notifications.push("Saved. Will take effect after restart.", "info");
+      notifications.push(t('settings.privacy.infoRestartRequired'), "info");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     }
@@ -94,9 +136,9 @@
     if (!profileState.peerId) return;
     try {
       await writeText(profileState.peerId);
-      notifications.push("Peer ID copied", "success");
+      notifications.push(t('settings.privacy.successPeerIdCopied'), "success");
     } catch (e) {
-      notifications.push(`Copy failed: ${e}`, "error");
+      notifications.push(t('settings.privacy.errorCopyFailed', { error: String(e) }), "error");
     }
   }
 
@@ -112,7 +154,7 @@
     try {
       await setContactBlocked(id, false);
       blocked = blocked.filter((c) => c.userId !== id);
-      notifications.push("Contact unblocked", "success");
+      notifications.push(t('settings.privacy.successContactUnblocked'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     }
@@ -120,16 +162,15 @@
 
   async function handleClearHistory() {
     if (!clearTarget) return;
-    const target =
+    const targetLabel =
       clearTarget === "*"
-        ? "all contacts"
+        ? t('settings.privacy.allContacts')
         : (contactsState.getById(clearTarget)?.displayName ?? "this contact");
     const ok = await confirmDialog({
-      title: "Clear message history?",
-      message: `All messages with ${target} will be deleted from this device.`,
-      detail:
-        "This cannot be undone. Copies on the other side are not affected.",
-      confirmLabel: "Clear history",
+      title: t('settings.privacy.clearHistoryDialogTitle'),
+      message: t('settings.privacy.clearHistoryDialogMessage', { target: targetLabel }),
+      detail: t('settings.privacy.clearHistoryDialogDetail'),
+      confirmLabel: t('settings.privacy.clearHistoryDialogConfirm'),
       tone: "danger",
       holdMs: 5000,
     });
@@ -142,7 +183,7 @@
       } else {
         messagesState.clearForContact(clearTarget);
       }
-      notifications.push("Message history cleared", "success");
+      notifications.push(t('settings.privacy.successHistoryCleared'), "success");
     } catch (e) {
       notifications.push(`Failed: ${e}`, "error");
     } finally {
@@ -152,21 +193,19 @@
 
   async function handleDeleteAll() {
     const first = await confirmDialog({
-      title: "Delete all local data?",
-      message:
-        "This wipes all contacts, messages, identity keys, and cached backups.",
-      detail:
-        "Your identity is gone unless you have exported a backup. This cannot be undone.",
-      confirmLabel: "Continue",
+      title: t('settings.privacy.deleteAllDialog1Title'),
+      message: t('settings.privacy.deleteAllDialog1Message'),
+      detail: t('settings.privacy.deleteAllDialog1Detail'),
+      confirmLabel: t('settings.privacy.deleteAllDialog1Confirm'),
       tone: "danger",
     });
     if (!first) return;
     const second = await confirmDialog({
-      title: "Are you absolutely sure?",
-      message:
-        "Once deleted, nothing can be recovered. Export a backup first if anything should be kept. This will close the app to reset it. Please open it again.",
-      confirmLabel: "Delete everything",
-      cancelLabel: "Go back",
+      title: t('settings.privacy.deleteAllDialog2Title'),
+      message: t('settings.privacy.deleteAllDialog2Message'),
+      detail: t('settings.privacy.deleteAllDialog2Title'),
+      confirmLabel: t('settings.privacy.deleteAllDialog2Confirm'),
+      cancelLabel: t('settings.privacy.deleteAllDialog2Cancel'),
       tone: "danger",
       holdMs: 5000,
     });
@@ -189,7 +228,7 @@
   ];
 
   const clearOptions = $derived([
-    { value: "*" as const, label: "All contacts" },
+    { value: "*" as const, label: t('settings.privacy.allContacts') },
     ...contactsState.contacts.map((c) => ({
       value: c.userId,
       label: c.displayName,
@@ -198,25 +237,25 @@
 </script>
 
 <div class="sec-head">
-  <h2>Privacy &amp; Security</h2>
-  <p>Your identity and data controls.</p>
+  <h2>{t('settings.privacy.heading')}</h2>
+  <p>{t('settings.privacy.description')}</p>
 </div>
 
-<SettingCard title="Identity">
+<SettingCard title={t('settings.privacy.identityCard')}>
   {#if profileState.peerId}
     <div class="peer-id-block">
       <div class="peer-id-head">
-        <span class="peer-id-label">Current Peer ID</span>
+        <span class="peer-id-label">{t('settings.privacy.peerIdLabel')}</span>
         <div class="peer-id-actions">
           <button
             class="icon-btn"
             onclick={copyPeerId}
-            aria-label="Copy peer ID"
+            aria-label={t('settings.privacy.copyPeerIdAriaLabel')}
           >
             <Copy size={13} />
           </button>
           <Button variant="secondary" loading={rotating} onclick={handleRotate}>
-            <RefreshCw size={13} /> Rotate
+            <RefreshCw size={13} /> {t('settings.privacy.rotateButton')}
           </Button>
         </div>
       </div>
@@ -224,8 +263,8 @@
     </div>
   {/if}
   <SettingRow
-    title="Auto-rotation"
-    description="How often your transport identity changes. Applied on next app restart."
+    title={t('settings.privacy.autoRotationRow')}
+    description={t('settings.privacy.autoRotationDescription')}
   >
     <Segmented
       value={rotationInterval}
@@ -236,34 +275,45 @@
   </SettingRow>
 </SettingCard>
 
-<!--
-  App lock (password / biometric) — feature not implemented yet.
-  Re-enable this block when the backend commands exist:
-    - get_app_lock_config / set_app_lock / verify_app_lock
-  Restore imports: getAppLockConfig, setAppLock, AppLockMethod.
--->
+{#if isMobile && biometricAvailable}
+  <SettingCard title={t('settings.privacy.appLockCard')}>
+    <SettingRow
+      title={t('settings.privacy.appLockBiometricRow')}
+      description={t('settings.privacy.appLockBiometricDescription')}
+    >
+      <div class="biometric-row">
+        <Fingerprint size={16} />
+        <Toggle
+          checked={appLockEnabled}
+          onchange={handleAppLockChange}
+          ariaLabel={t('settings.privacy.appLockBiometricAriaLabel')}
+        />
+      </div>
+    </SettingRow>
+  </SettingCard>
+{/if}
 
-<SettingCard title="Messaging">
+<SettingCard title={t('settings.privacy.messagingCard')}>
   <SettingRow
-    title="Send typing indicators"
-    description="Contacts see when you are typing. Disable for more privacy."
+    title={t('settings.privacy.typingIndicatorsRow')}
+    description={t('settings.privacy.typingIndicatorsDescription')}
   >
     <Toggle
       checked={typing}
       onchange={handleTypingChange}
-      ariaLabel="Send typing indicators"
+      ariaLabel={t('settings.privacy.typingIndicatorsAriaLabel')}
     />
   </SettingRow>
 </SettingCard>
 
 <SettingCard
-  title="Blocked contacts"
-  description="People you block cannot connect to you or send you messages."
+  title={t('settings.privacy.blockedCard')}
+  description={t('settings.privacy.blockedDescription')}
 >
   {#if blockedLoading}
-    <div class="empty">Loading…</div>
+    <div class="empty">{t('settings.privacy.blockedLoading')}</div>
   {:else if blocked.length === 0}
-    <div class="empty">No blocked contacts.</div>
+    <div class="empty">{t('settings.privacy.noBlocked')}</div>
   {:else}
     {#each blocked as c}
       <SettingRow
@@ -272,7 +322,7 @@
       >
         <Avatar name={c.displayName} src={c.avatarBase64} size={28} />
         <Button variant="secondary" onclick={() => handleUnblock(c.userId)}>
-          <ShieldOff size={13} /> Unblock
+          <ShieldOff size={13} /> {t('settings.privacy.unblockButton')}
         </Button>
       </SettingRow>
     {/each}
@@ -280,18 +330,18 @@
 </SettingCard>
 
 <SettingCard
-  title="Clear history"
-  description="Delete chat history for a specific contact or all of them."
+  title={t('settings.privacy.clearHistoryCard')}
+  description={t('settings.privacy.clearHistoryCardDescription')}
 >
   <SettingRow
-    title="Target"
-    description="Messages are permanently removed from this device."
+    title={t('settings.privacy.clearTargetRow')}
+    description={t('settings.privacy.clearTargetDescription')}
   >
     <Select
       value={clearTarget as any}
       options={clearOptions}
       onchange={(v) => (clearTarget = v as string)}
-      placeholder="Choose contact…"
+      placeholder={t('settings.privacy.clearContactPlaceholder')}
       minWidth="220px"
     />
     <Button
@@ -300,25 +350,24 @@
       loading={clearing}
       onclick={handleClearHistory}
     >
-      <Trash2 size={13} /> Clear
+      <Trash2 size={13} /> {t('settings.privacy.clearButton')}
     </Button>
   </SettingRow>
 </SettingCard>
 
-<SettingCard title="Danger zone" tone="danger">
+<SettingCard title={t('settings.privacy.dangerCard')} tone="danger">
   <div class="danger-body">
     <div class="danger-head">
       <TriangleAlert size={16} />
       <div>
-        <div class="danger-title">Delete all local data</div>
+        <div class="danger-title">{t('settings.privacy.deleteAllDataTitle')}</div>
         <div class="danger-desc">
-          Wipes contacts, messages, keys, and everything from this device. Your
-          identity is lost unless you have an exported backup.
+          {t('settings.privacy.deleteAllDataDescription')}
         </div>
       </div>
     </div>
     <Button variant="danger" loading={deleting} onclick={handleDeleteAll}>
-      <Trash2 size={13} /> Delete everything
+      <Trash2 size={13} /> {t('settings.privacy.deleteAllButton')}
     </Button>
   </div>
 </SettingCard>
@@ -409,5 +458,11 @@
     font-size: 12px;
     color: var(--text-secondary);
     line-height: 1.5;
+  }
+  .biometric-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-secondary);
   }
 </style>

@@ -62,14 +62,29 @@ function createAppearanceState() {
     return theme === 'dark';
   }
 
-  function apply() {
-    if (!browser) return;
+  function applyImmediate() {
     const root = document.documentElement;
     root.dataset.theme = effectiveDark() ? 'dark' : 'light';
     root.dataset.palette = palette;
-    // `--zoom` drives a CSS `zoom` on <body> plus compensating width/height
-    // so the scaled viewport still fills the window exactly.
     root.style.setProperty('--zoom', String(ZOOM_SCALE[zoom]));
+  }
+
+  function apply() {
+    if (!browser) return;
+    const root = document.documentElement;
+    const themeChanging =
+      root.dataset.theme !== (effectiveDark() ? 'dark' : 'light') ||
+      root.dataset.palette !== palette;
+
+    type DocWithVT = Document & {
+      startViewTransition?: (cb: () => void) => unknown;
+    };
+    const doc = document as DocWithVT;
+    if (themeChanging && initialized && typeof doc.startViewTransition === 'function') {
+      doc.startViewTransition(() => applyImmediate());
+    } else {
+      applyImmediate();
+    }
   }
 
   function init() {

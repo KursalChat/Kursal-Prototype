@@ -77,6 +77,9 @@ apple-native-keyring-store = { workspace = true, features = [
     "protected",
 ] }
 
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+libp2p = { workspace = true, features = ["mdns"] }
+
 [target.'cfg(target_os = "ios")'.dependencies]
 apple-native-keyring-store = { workspace = true, features = ["protected"] }
 

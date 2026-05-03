@@ -7,6 +7,7 @@
   import type { ContactResponse } from "$lib/types";
   import { removeContact, setContactBlocked } from "$lib/api/contacts";
   import { confirm } from "@tauri-apps/plugin-dialog";
+  import { t } from '$lib/i18n';
 
   let {
     contact,
@@ -19,7 +20,7 @@
     if (!contact) return;
     try {
       await navigator.clipboard.writeText(contact.userId);
-      notifications.push("User ID copied", "success");
+      notifications.push(t('profile.successUserIdCopied'), "success");
     } catch (e) {
       console.error("Copy failed", e);
     }
@@ -41,9 +42,9 @@
     try {
       await setContactBlocked(userId, willBlock);
       contactsState.upsert({ ...contact, blocked: willBlock });
-      notifications.push(`${displayName} ${willBlock ? "blocked" : "unblocked"}`, "success");
+      notifications.push(t(willBlock ? 'profile.successBlocked' : 'profile.successUnblocked', { name: displayName }), "success");
     } catch (e) {
-      notifications.push(`Failed to ${willBlock ? "block" : "unblock"} contact`, "error");
+      notifications.push(t(willBlock ? 'profile.errorBlock' : 'profile.errorUnblock'), "error");
       console.error(e);
     }
   }
@@ -64,10 +65,10 @@
 
     try {
       await removeContact(userId);
-      notifications.push(`${displayName} removed`, "success");
+      notifications.push(t('profile.successRemoved', { name: displayName }), "success");
       onClose();
     } catch (e) {
-      notifications.push("Failed to remove contact", "error");
+      notifications.push(t('profile.errorRemove'), "error");
       console.error(e);
     }
   }
@@ -88,7 +89,7 @@
   }}
 >
   <div class="modal" role="dialog" aria-modal="true" tabindex="-1">
-    <button class="close-btn" onclick={onClose}>
+    <button class="close-btn" onclick={onClose} aria-label={t('common.close')}>
       <X size={20} />
     </button>
 
@@ -99,8 +100,8 @@
 
         <div class="user-id-card">
           <div class="user-id-row">
-            <span class="user-id-label">User ID</span>
-            <button class="copy-btn" onclick={copyUserId} title="Copy User ID">
+            <span class="user-id-label">{t('profile.userIdLabel')}</span>
+            <button class="copy-btn" onclick={copyUserId} title={t('profile.copyUserId')} aria-label={t('profile.copyUserId')}>
               <Copy size={13} />
             </button>
           </div>
@@ -111,15 +112,15 @@
       <div class="actions">
         <button class="secondary-btn" onclick={() => (showSecurityModal = true)}>
           <Shield size={16} />
-          {contact.verified ? "View Security Code" : "Verify Security Code"}
+          {contact.verified ? t('profile.viewSecurityCode') : t('profile.verifySecurityCode')}
         </button>
         <button class="danger-btn block-btn" onclick={handleToggleBlock}>
           <Ban size={16} />
-          {contact.blocked ? "Unblock Contact" : "Block Contact"}
+          {contact.blocked ? t('profile.unblockContact') : t('profile.blockContact')}
         </button>
         <button class="danger-btn" onclick={handleRemoveContact}>
           <Trash2 size={16} />
-          Remove Contact
+          {t('profile.removeContact')}
         </button>
       </div>
     {/if}

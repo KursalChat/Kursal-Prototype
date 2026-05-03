@@ -1,11 +1,10 @@
 <script lang="ts">
   import { Menu, ShieldAlert } from "lucide-svelte";
   import Avatar from "$lib/components/Avatar.svelte";
-  import StatusDot from "$lib/components/StatusDot.svelte";
   import { contactsState } from "$lib/state/contacts.svelte";
   import { uiState } from "$lib/state/ui.svelte";
-  import { getStatusLabel } from "./chat-utils";
   import type { ContactResponse } from "$lib/types";
+  import { t } from "$lib/i18n";
 
   interface Props {
     contact: ContactResponse;
@@ -14,6 +13,17 @@
   }
 
   let { contact, onOpenProfile, onOpenSecurity }: Props = $props();
+
+  const status = $derived(
+    contactsState.connectionStatus[contact.userId] ?? "disconnected",
+  );
+
+  const statusLabel = $derived.by(() => {
+    if (status === "direct" || status === "holepunch") return t("chat.header.statusOnline");
+    if (status === "relay") return t("chat.header.statusRelay");
+    if (status === "connecting") return t("chat.header.statusConnecting");
+    return t("chat.header.statusOffline");
+  });
 </script>
 
 <header class="chat-header" data-tauri-drag-region>
@@ -21,29 +31,25 @@
     <button
       class="menu-btn"
       onclick={() => (uiState.mobileSidebarOpen = true)}
-      aria-label="Open sidebar"
+      aria-label={t("chat.header.openSidebar")}
     >
       <Menu size={20} />
     </button>
     <button
       class="header-profile"
       onclick={onOpenProfile}
-      aria-label="View profile"
+      aria-label={t("chat.header.viewProfile")}
     >
       <Avatar
         name={contact.displayName}
         src={contact.avatarBase64}
         size={34}
+        {status}
+        showStatus
       />
       <div class="header-info">
         <span class="header-name">{contact.displayName}</span>
-        <span class="header-status">
-          <StatusDot
-            status={contactsState.connectionStatus[contact.userId] ??
-              "disconnected"}
-          />
-          {getStatusLabel(contactsState.connectionStatus[contact.userId])}
-        </span>
+        <span class="header-status">{statusLabel}</span>
       </div>
     </button>
   </div>
@@ -51,9 +57,9 @@
     {#if !contact.verified}
       <button
         class="verify-btn"
-        title="Verify identity"
+        title={t("chat.header.verifyIdentity")}
         onclick={onOpenSecurity}
-        aria-label="Verify identity"
+        aria-label={t("chat.header.verifyIdentity")}
       >
         <ShieldAlert size={16} />
       </button>
@@ -63,8 +69,8 @@
 
 <style>
   .chat-header {
-    height: var(--header-height);
-    padding: 0 12px;
+    height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    padding: env(safe-area-inset-top, 0px) 12px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -107,14 +113,14 @@
   }
 
   .header-profile {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 8px;
-    border-radius: var(--radius-md);
+    gap: 12px;
+    padding: 4px 10px 4px 6px;
+    border-radius: 999px;
     transition: background var(--transition);
     min-width: 0;
-    flex: 1;
+    max-width: min(320px, 60vw);
     -webkit-app-region: no-drag;
   }
   .header-profile:hover {
@@ -125,9 +131,10 @@
     flex-direction: column;
     min-width: 0;
     align-items: flex-start;
+    gap: 1px;
   }
   .header-name {
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
@@ -138,9 +145,7 @@
   .header-status {
     font-size: 12px;
     color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    line-height: 1.2;
   }
   .header-right {
     display: flex;

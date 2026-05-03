@@ -76,6 +76,16 @@
       {#if o.detail}
         <p class="detail">{o.detail}</p>
       {/if}
+      {#if o.checkbox}
+        <label class="checkbox">
+          <input
+            type="checkbox"
+            checked={confirmState.checkboxChecked}
+            onchange={(e) => confirmState.setChecked((e.currentTarget as HTMLInputElement).checked)}
+          />
+          <span>{o.checkbox.label}</span>
+        </label>
+      {/if}
     </div>
     <div class="foot">
       <Button variant="secondary" onclick={() => confirmState.cancel()}>
@@ -181,6 +191,23 @@
     font-size: 13px;
     color: var(--text-secondary);
     line-height: 1.55;
+  }
+  .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+  }
+  .checkbox input {
+    accent-color: var(--accent-solid);
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+    cursor: pointer;
   }
   .foot {
     display: flex;

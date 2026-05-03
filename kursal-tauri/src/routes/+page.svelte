@@ -1,6 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
+  import { t } from "$lib/i18n";
 
   let startupError = "";
 
@@ -22,7 +23,7 @@
 
 {#if startupError}
   <main style="padding: 1rem; font-family: sans-serif;">
-    <h1>Kursal failed to start</h1>
+    <h1>{t('root.failedToStart')}</h1>
     <p>{startupError}</p>
   </main>
 {/if}

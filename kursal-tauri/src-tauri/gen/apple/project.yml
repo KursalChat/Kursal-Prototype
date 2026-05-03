@@ -2,7 +2,7 @@ name: kursal-app
 options:
   bundleIdPrefix: chat.kursal
   deploymentTarget:
-    iOS: 14.0
+    iOS: 15.6
 fileGroups: [../../src]
 configs:
   debug: debug
@@ -31,6 +31,8 @@ targets:
       - path: Sources
       - path: Assets.xcassets
       - path: Externals
+        excludes:
+          - "**/debug/**"
       - path: kursal-app_iOS
       - path: assets
         buildPhase: resources
@@ -78,7 +80,10 @@ targets:
       - sdk: QuartzCore.framework
       - sdk: Security.framework
       - sdk: UIKit.framework
+      - sdk: CoreBluetooth.framework
       - sdk: WebKit.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: CFNetwork.framework
     preBuildScripts:
       - script: bun tauri ios xcode-script -v --platform ${PLATFORM_DISPLAY_NAME:?} --sdk-root ${SDKROOT:?} --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration ${CONFIGURATION:?} ${FORCE_COLOR} ${ARCHS:?}
         name: Build Rust Code

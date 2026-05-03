@@ -5,16 +5,16 @@ use crate::{
     crypto::{PreKeyBundleData, session_initiate},
     first_contact::make_username,
     identity::UserId,
-    network::swarm::{SwarmCommand, get_listen_addrs},
+    network::swarm::{SwarmCommand, get_nearby_listen_addrs},
     storage::{SharedDatabase, get_dilithium_pub, get_timestamp_secs},
 };
 use libsignal_protocol::{DeviceId, ProtocolAddress};
 use rand::{Rng, TryRngCore, distr::Uniform, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use utoipa::ToSchema;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
+use utoipa::ToSchema;
 
 pub mod bluetooth;
 pub mod mdns;
@@ -167,9 +167,18 @@ pub async fn handle_nearby_request(
     };
 
     if !decision {
-        transport
+        if let Err(err) = transport
             .send(from_peer_id, NearbyMessage::ConnectDecline)
-            .await?;
+            .await
+        {
+            log::warn!("[nearby] decline send to {from_peer_id} failed: {err}");
+            let _ = event_tx
+                .send(AppEvent::BackendSignal {
+                    signal: "nearby_decline_send_failed".to_string(),
+                    payload: format!("{from_peer_id}: {err}"),
+                })
+                .await;
+        }
         return Ok(());
     }
 
@@ -188,7 +197,7 @@ pub async fn handle_nearby_request(
             NearbyMessage::ConnectAccept {
                 bundle: bundle_serialized,
                 dilithium_pub: dilithium_pub_key,
-                relay_addresses: get_listen_addrs(cmd_tx).await?,
+                relay_addresses: get_nearby_listen_addrs(cmd_tx).await?,
             },
         )
         .await?;
@@ -225,6 +234,13 @@ pub async fn handle_nearby_request(
                 let db_lock = db.0.lock().await;
                 contact.save(&db_lock)?;
             }
+
+            cmd_tx
+                .send(SwarmCommand::ContactAdded {
+                    contact: contact.clone(),
+                })
+                .await
+                .map_err(|err| KursalError::Network(err.to_string()))?;
 
             event_tx
                 .send(AppEvent::ContactAdded { contact })
@@ -301,7 +317,7 @@ pub async fn nearby_connect(
                     NearbyMessage::BundleReply {
                         bundle: our_bundle,
                         dilithium_pub: our_dilithium,
-                        relay_addresses: get_listen_addrs(cmd_tx).await?,
+                        relay_addresses: get_nearby_listen_addrs(cmd_tx).await?,
                     },
                 )
                 .await?;
@@ -310,6 +326,13 @@ pub async fn nearby_connect(
                 let db_lock = db.0.lock().await;
                 contact.save(&db_lock)?;
             }
+
+            cmd_tx
+                .send(SwarmCommand::ContactAdded {
+                    contact: contact.clone(),
+                })
+                .await
+                .map_err(|err| KursalError::Network(err.to_string()))?;
 
             event_tx
                 .send(AppEvent::ContactAdded { contact })
